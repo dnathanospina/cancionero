@@ -6,13 +6,21 @@ import { openDB } from 'idb';
  *  - blobs: contenido de PDF e imágenes, separado para no cargarlo al listar
  *  - prefs: ajustes por canción (transposición, capo, zoom, velocidad…)
  *  - kv:    ajustes generales y estado de sincronización
+ *  - outbox: cambios del modo líder pendientes de subir (listas guardadas o borradas)
+ *  - demoRemote: la «OneDrive simulada» del modo demostración (archivos escritos)
  */
-const dbPromise = openDB('cancionero-bethel', 1, {
-  upgrade(db) {
-    db.createObjectStore('files', { keyPath: 'path' });
-    db.createObjectStore('blobs');
-    db.createObjectStore('prefs');
-    db.createObjectStore('kv');
+const dbPromise = openDB('cancionero-bethel', 2, {
+  upgrade(db, oldVersion) {
+    if (oldVersion < 1) {
+      db.createObjectStore('files', { keyPath: 'path' });
+      db.createObjectStore('blobs');
+      db.createObjectStore('prefs');
+      db.createObjectStore('kv');
+    }
+    if (oldVersion < 2) {
+      db.createObjectStore('outbox', { keyPath: 'key' });
+      db.createObjectStore('demoRemote', { keyPath: 'path' });
+    }
   },
 });
 
@@ -75,4 +83,32 @@ export async function putPrefs(entries) {
   const db = await dbPromise;
   const tx = db.transaction('prefs', 'readwrite');
   await Promise.all([...entries.map(([k, v]) => tx.store.put(v, k)), tx.done]);
+}
+
+// ---- Cambios pendientes de subir
+export async function outboxAll() {
+  return (await dbPromise).getAll('outbox');
+}
+export async function outboxPut(entry) {
+  return (await dbPromise).put('outbox', entry);
+}
+export async function outboxDelete(key) {
+  return (await dbPromise).delete('outbox', key);
+}
+
+// ---- OneDrive simulada (demostración)
+export async function demoRemoteAll() {
+  return (await dbPromise).getAll('demoRemote');
+}
+export async function demoRemoteGet(path) {
+  return (await dbPromise).get('demoRemote', path);
+}
+export async function demoRemotePut(rec) {
+  return (await dbPromise).put('demoRemote', rec);
+}
+export async function demoRemoteClear() {
+  return (await dbPromise).clear('demoRemote');
+}
+export async function kvDelete(key) {
+  return (await dbPromise).delete('kv', key);
 }

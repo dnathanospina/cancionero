@@ -78,3 +78,15 @@ test('decodifica UTF-8 y Windows-1252', () => {
   assert.equal(decodeText(new Uint8Array([0x43, 0x61, 0x6e, 0x63, 0x69, 0xf3, 0x6e])), 'Canción');
   assert.equal(decodeText(new Uint8Array([0xef, 0xbb, 0xbf, 0x41])), 'A');
 });
+
+import { splitSongs, safeName } from '../src/chordpro/split.js';
+
+test('separa varias canciones de un mismo archivo (SongBook)', () => {
+  const t = '{title: Uno}\n[G]la\n{new_song}\n{title: Dos}\n[C]le\n  {ns}  \n{t: Tres}\nli';
+  const songs = splitSongs(t);
+  assert.equal(songs.length, 3);
+  assert.equal(parseChordPro(songs[1]).meta.title, 'Dos');
+  assert.equal(parseChordPro(songs[2]).meta.title, 'Tres');
+  assert.deepEqual(splitSongs('{title: Solo}\nx'), ['{title: Solo}\nx']);
+  assert.equal(safeName('A/B: C?'), 'A-B- C-');
+});

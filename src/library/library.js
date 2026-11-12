@@ -27,21 +27,55 @@ export function sectionOfFolder(name) {
   return null;
 }
 
-/** Clasifica un archivo según su ruta relativa a la carpeta raíz del cancionero. */
-export function classifyPath(path) {
-  const parts = path.split('/').filter(Boolean);
-  if (parts.length < 2) return null;
-  const section = sectionOfFolder(parts[0]);
-  if (!section) return null;
+const segs = (p) => String(p ?? '').split('/').filter(Boolean);
+const LEADER_FILE = 'ajustes-lider.json';
+
+/**
+ * Clasifica un archivo según su ruta relativa a la carpeta raíz del cancionero.
+ * Devuelve { section, ext, kind, depth } o null. `depth` = número de carpetas
+ * que forman la carpeta de la sección (las siguientes son categorías).
+ *
+ * `layout` (opcional) = { voces, bateria, enlaces, listas } con los nombres
+ * reales de las carpetas; `voces: ''` significa «todo lo demás». Sin layout se
+ * reconocen los nombres habituales (Voces, Batería, Listas, Enlaces…).
+ */
+export function classifyPath(path, layout = null) {
+  const parts = segs(path);
   const { ext, base } = splitPath(path);
-  if (base.startsWith('.') || base.startsWith('~')) return null;
+  if (base.startsWith('.') || base.startsWith('~') || !parts.length) return null;
+  if (parts.length === 1 && normalize(parts[0]) === normalize(LEADER_FILE)) {
+    return { section: 'config', ext, kind: 'config', depth: 0 };
+  }
+
+  let section = null;
+  let depth = 1;
+  if (layout) {
+    // La carpeta configurada más larga que coincida gana (p. ej. «Himnos/Batería»).
+    const candidates = ['bateria', 'listas', 'enlaces', 'voces']
+      .map((sec) => ({ sec, folder: segs(layout[sec] ?? '').map(normalize) }))
+      .filter((c) => c.folder.length)
+      .sort((a, b) => b.folder.length - a.folder.length);
+    const norm = parts.slice(0, -1).map(normalize);
+    const hit = candidates.find((c) => c.folder.every((f, i) => norm[i] === f));
+    if (hit) {
+      section = hit.sec;
+      depth = hit.folder.length;
+    } else if (!segs(layout.voces).length) {
+      section = 'voces';
+      depth = 0;
+    }
+  } else if (parts.length >= 2) {
+    section = sectionOfFolder(parts[0]);
+  }
+  if (!section) return null;
+
   let kind = null;
   if (section === 'listas') kind = ext === 'txt' ? 'list' : null;
   else if (section === 'enlaces') kind = LINK_EXT.has(ext) ? 'links' : null;
   else if (TEXT_EXT.has(ext)) kind = 'text';
   else if (ext === 'pdf') kind = 'pdf';
   else if (IMAGE_EXT.has(ext)) kind = 'image';
-  return kind ? { section, ext, kind } : null;
+  return kind ? { section, ext, kind, depth } : null;
 }
 
 export const isBinaryKind = (kind) => kind === 'pdf' || kind === 'image';
@@ -52,15 +86,16 @@ const naturalPage = (a, b) => compareEs(splitPath(a).base, splitPath(b).base);
  * Carpetas intermedias entre la carpeta de sección y el archivo = categorías
  * (así organiza SongBook las suyas). `skip` quita la carpeta de una canción de imágenes.
  */
-function folderCategories(path, origin, skip = 0) {
-  const dirs = path.split('/').slice(origin === 'local' ? 2 : 1, -1);
+function folderCategories(path, record, skip = 0) {
+  const depth = record?.depth ?? 1;
+  const dirs = path.split('/').slice((record?.origin === 'local' ? 1 : 0) + depth, -1);
   return skip ? dirs.slice(0, -skip) : dirs;
 }
 
 function makeSong(section, id, name, kind, paths, record, { imageset = false } = {}) {
   const meta = record?.meta ?? {};
   const title = meta.title || name;
-  const categories = [...new Set([...folderCategories(paths[0], record?.origin, imageset ? 1 : 0), ...(meta.tags ?? [])])];
+  const categories = [...new Set([...folderCategories(paths[0], record, imageset ? 1 : 0), ...(meta.tags ?? [])])];
   return {
     key: `${section}:${id}`,
     id,
@@ -104,11 +139,11 @@ export function buildLibrary(files, { today = todayISO() } = {}) {
 
   const candidates = { voces: [], bateria: [] };
   for (const [dir, group] of folders) {
-    const depth = dir.split('/').length; // 1 = carpeta de sección
+    const level = dir ? dir.split('/').length : 0;
     const onlyImages = group.every((f) => f.kind === 'image');
-    // Imágenes locales importadas viven en local/<Sección>, profundidad 2.
-    const sectionDepth = group[0].origin === 'local' ? 2 : 1;
-    if (depth > sectionDepth && onlyImages) {
+    // Carpeta de la sección: local/<Sección> para los importados; si no, según `depth`.
+    const sectionDepth = (group[0].origin === 'local' ? 1 : 0) + (group[0].depth ?? 1);
+    if (level > sectionDepth && onlyImages) {
       const name = dir.split('/').pop();
       const paths = group.map((f) => f.path).sort(naturalPage);
       candidates[group[0].section].push(makeSong(group[0].section, normalize(name), name, 'imageset', paths, group[0], { imageset: true }));
@@ -159,7 +194,7 @@ export function buildLibrary(files, { today = todayISO() } = {}) {
     if (f.section !== 'listas' || typeof f.text !== 'string') continue;
     const base = splitPath(f.path).base;
     const list = parseList(f.text, base);
-    lib.lists.push({ ...list, id: f.path, path: f.path });
+    lib.lists.push({ ...list, id: f.path, path: f.path, pending: f.pending ?? null, etag: f.etag ?? null });
   }
   sortLists(lib.lists, today);
   return lib;

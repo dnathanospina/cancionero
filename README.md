@@ -23,6 +23,9 @@ Se instala como una app en iPhone, iPad y Android y funciona sin conexión.
 - **Escuchar:** cada canción puede tener su enlace (YouTube se abre en su app si está instalada), y cada lista tiene «Escuchar la lista» para preparar el ensayo.
 - **La pantalla no se apaga** mientras hay una canción abierta.
 - **Copia de seguridad** de los ajustes personales y de los archivos importados.
+- **Modo líder con PIN** para crear, editar, duplicar y borrar las listas desde el móvil (ver más abajo).
+- **Importar canciones a un solo dispositivo** (también exportaciones de SongBook y carpetas en .zip), para probar con canciones reales sin subirlas a ningún sitio.
+- **Actualizaciones automáticas:** una versión nueva se instala sola, salvo si hay una canción abierta o una lista a medio editar; en ese caso espera hasta que se cierre.
 
 ## Estructura de la carpeta compartida
 
@@ -98,14 +101,98 @@ Se puede indicar el enlace de tres maneras; la app entiende todas:
 «Escuchar la lista» reproduce seguidas todas las canciones de YouTube (hasta 50) o permite abrirlas una a una.
 La batería usa el enlace de su canción de voces.
 
+## Modo líder y editor de listas
+
+En *Listas → Editar listas* (o en Ajustes) se introduce el PIN de líder. El modo líder se mantiene en ese
+dispositivo hasta que se cierra la app.
+
+- **Nueva lista:** con la plantilla «Domingo» (próximo domingo a la hora configurada en Ajustes, por
+  defecto las 11:00) o «Evento especial». Tiene nombre, fecha, hora y una nota.
+- **Canciones:** se añaden desde el cancionero con el buscador y las categorías. Se reordenan arrastrando
+  por el asa ⋮⋮. A cada una se le puede fijar el tono del evento y una nota. Se ve si tiene versión de
+  batería y enlace para escuchar.
+- **Duplicar, editar y borrar** (con confirmación) desde la página de cada lista.
+- **Guardar** escribe `Listas/AAAA-MM-DD Nombre.txt` en el formato de texto de arriba.
+- **Sin conexión:** lo guardado queda «pendiente de subir» y se sube solo al recuperar la conexión. Si
+  otra persona cambió la misma lista mientras tanto, aparece un conflicto con tres opciones: quedarse con
+  su versión, sobrescribir con la mía o guardar la mía como copia.
+- **Si se cierra la app a mitad de una edición,** al volver se ofrece recuperar los cambios.
+
+### PIN
+
+- **Dónde se guarda:** en `ajustes-lider.json`, junto a las listas. El archivo no contiene el PIN, sino
+  una huella PBKDF2-SHA256 con sal y 310 000 iteraciones. El PIN nunca está en el repositorio.
+- **Cómo se crea y cambia:** la primera vez, el líder lo crea desde la app; después se cambia en Ajustes.
+- **Límites:** tiene un mínimo de 6 dígitos y, tras 5 intentos fallidos, hay que esperar 30 segundos.
+- **Qué no protege:** el PIN evita cambios por error o sin permiso desde la app, pero no protege los
+  archivos. Con la contraseña de la cuenta compartida se pueden editar directamente en OneDrive, y quien
+  tenga el archivo podría averiguar un PIN corto por fuerza bruta (lento, pero posible).
+
+### Dónde se escribe
+
+El destino está en `src/config.js` (`WRITE_TARGET`). Hay dos opciones:
+
+- **`appFolder`** (por defecto): `Aplicaciones/Cancionero Bethel/` en OneDrive. Necesita el permiso
+  mínimo `Files.ReadWrite.AppFolder`, y así la app no puede tocar las canciones.
+- **`library`**: dentro de la carpeta del cancionero. Necesita `Files.ReadWrite`.
+
+La app usa rutas «lógicas» (`Listas/…`, `ajustes-lider.json`) y cada origen de datos las traduce, así
+que cambiar de destino no afecta al editor.
+
+### Estructura de carpetas configurable
+
+En *Ajustes → Carpetas en OneDrive* se indica la carpeta del cancionero y dónde están las canciones de
+voces, las partituras de batería y los enlaces. Si las canciones de voces se dejan vacías, toda la
+carpeta cuenta como voces y sus subcarpetas son categorías, como las organiza SongBook. Así no hace falta
+reorganizar la biblioteca. Se aplicará al conectar OneDrive.
+
+## Importar canciones reales a un dispositivo
+
+En *Ajustes → Importar canciones a este dispositivo*. Se guardan solo en ese teléfono: no se suben ni
+llegan al repositorio, y se pueden borrar desde ahí mismo.
+
+- **Formatos:** `.cho`, `.chopro`, `.chordpro`, `.pro`, `.crd`, `.txt`, PDF, imágenes y **`.zip`**. Sirve,
+  por ejemplo, una exportación de SongBook o una carpeta de OneDrive descargada como .zip.
+- **Subcarpetas del .zip:** se convierten en categorías. Si el .zip trae carpetas «Voces» y «Batería»,
+  se respetan.
+- **Varias canciones en un archivo:** las separadas por `{new_song}` o `{ns}` se importan como canciones
+  distintas.
+- **Codificación:** se respetan las tildes y la ñ de archivos antiguos (Windows-1252).
+- **Si la canción ya existe:** se elige entre reemplazarla u omitirla.
+
 ## Demostración
 
 Mientras no haya conexión con OneDrive (fase 2), la app usa una biblioteca de demostración
 (`public/demo/Cancionero`) con la misma estructura. Incluye solo himnos de dominio público:
-Lutero/Cabrera, Heber/Cabrera, Newton, Crosby, Ken y Mohr/Fliedner. Tienen categorías de ejemplo, y
+Lutero/Cabrera, Heber/Cabrera, Newton, Crosby, Ken y Mohr/Fliedner.
+El **PIN de líder de la demostración es `123456`**. Lo que se guarda va a una «OneDrive simulada» en el
+dispositivo, con las mismas reglas que la real (pendientes sin conexión, conflictos). En Ajustes hay
+botones para simular que otra persona cambia una lista y para restablecer la demostración. Tienen categorías de ejemplo, y
 el botón «Escuchar» está desactivado porque no hay enlaces reales. Los acordes y las partituras de batería son
 arreglos propios. En las listas de demostración, `@domingo` se sustituye por la fecha del próximo
 domingo para que siempre haya un evento próximo.
+
+## Diseño
+
+Estilo iOS sobrio, con «liquid glass»:
+
+- **Tipografía del sistema** (San Francisco en Apple, Roboto en Android). Cabin solo para la marca «Bethel».
+- **Títulos grandes** que se encogen en la barra superior al desplazar.
+- **Fondo agrupado** `#F2F2F7` con listas blancas de esquinas redondeadas. Separadores finos y tonalidades en
+  texto gris a la derecha («Re», «Mi♭»).
+- **Dorado solo como acento:** `#DDA60D` en rellenos (punto del próximo culto, «Empezar», desplazamiento) y
+  `#8A6400` en texto y acordes. En oscuro: negro puro, tarjetas `#1C1C1E` y acento `#E8B630`.
+- **Cristal:**
+  - La barra de pestañas es una cápsula flotante de cristal.
+  - En la canción no hay barras fijas: volver, título, Escuchar/Más y los controles (tono, tamaño, solo
+    letra) flotan sobre la letra. Se ocultan al desplazar hacia abajo y vuelven al tocar o al subir.
+  - El desplazamiento automático es un botón dorado redondo. Capo, velocidad, tamaño de letra, pantalla
+    completa y la otra versión están en «Más».
+- **Fondos sólidos equivalentes** sustituyen al cristal si el sistema tiene «Reducir transparencia», si el
+  navegador no admite `backdrop-filter` o en dispositivos lentos (`deviceMemory ≤ 4`, o `≤ 4` núcleos
+  fuera de Apple). Se puede forzar en *Ajustes → Efecto cristal*.
+- **Movimiento reducido:** se respeta `prefers-reduced-motion`.
+- **Objetivos táctiles** de 44 px como mínimo.
 
 ## Logo
 
@@ -134,6 +221,7 @@ npm run build    # genera dist/
 
 Scripts opcionales (usan Playwright con Chromium): `node scripts/generate-icons.mjs` y
 `node scripts/generate-demo-charts.mjs` regeneran los iconos y las partituras de demostración.
+`node scripts/demo-pin.mjs` regenera el `ajustes-lider.json` de la demostración (PIN 123456).
 
 ### Organización del código
 
@@ -143,6 +231,8 @@ Scripts opcionales (usan Playwright con Chromium): `node scripts/generate-icons.
 | `src/music/` | Acordes, notación americana/latina y transposición |
 | `src/lists/` | Formato de las listas por evento |
 | `src/links/` | Enlaces para escuchar (YouTube, archivos .url/.webloc/.txt/.csv) |
+| `src/leader/` | Modo líder: PIN (PBKDF2), sesión en el dispositivo y ventanas |
+| `src/lists/` (outbox) | Cambios pendientes de subir, subida con control de versiones y conflictos |
 | `src/library/` | Biblioteca: secciones, emparejamiento voces↔batería, búsqueda |
 | `src/sources/` | Orígenes de datos (demostración; OneDrive en la fase 2) |
 | `src/sync/` | Sincronización incremental y descarga de PDF/imágenes bajo demanda |

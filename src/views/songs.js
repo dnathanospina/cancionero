@@ -2,7 +2,7 @@ import { h, clear } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { state } from '../state.js';
 import { searchSongs, categoriesOf, SECTION_LABEL, ALL } from '../library/library.js';
-import { link, songRow, emptyState, pageHeader, displayKey } from '../ui/components.js';
+import { link, songRow, emptyState, pageHeader, displayKey, sectionSwitch } from '../ui/components.js';
 import { plural } from '../ui/format.js';
 
 // Última categoría elegida en cada sección (mientras la app está abierta).
@@ -82,23 +82,29 @@ export function SongsView({ query }) {
       results.append(emptyState('Sin resultados', category === ALL ? 'Prueba con otra palabra del título o del artista.' : 'Prueba con otra categoría o con «Todas».'));
       return;
     }
-    // Índice por letra cuando no se está buscando.
+    // Grupos por letra (como la app Contactos) cuando no se está buscando.
     const searching = !!input.value.trim();
-    let letter = '';
+    let letter = null;
+    let group = null;
     const frag = document.createDocumentFragment();
     for (const s of found) {
       const l = (s.sortTitle.normalize('NFD')[0] || '#').toUpperCase().replace(/[^A-Z]/, '#');
-      if (!searching && l !== letter) {
+      if (!group || (!searching && l !== letter)) {
         letter = l;
-        frag.append(h('div.letter', l));
+        if (!searching) frag.append(h('h2.group-title.letter', l));
+        group = h('div.group.rows');
+        frag.append(group);
       }
-      frag.append(songRow(s, { href: link(`/cancion/${section}/${encodeURIComponent(s.id)}`), keyLabel: displayKey(s.songKey) }));
+      group.append(songRow(s, { href: link(`/cancion/${section}/${encodeURIComponent(s.id)}`), keyLabel: displayKey(s.songKey) }));
     }
     results.append(frag);
   }
 
   el.append(
-    h('div.sticky-search', pageHeader('Canciones'), h('label.search', icon('search', { size: 20 }), input), chips, count),
+    pageHeader('Canciones', null, sectionSwitch()),
+    h('label.search', icon('search', { size: 18 }), input),
+    chips,
+    count,
     results,
   );
   renderChips();

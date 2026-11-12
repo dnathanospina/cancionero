@@ -1,9 +1,10 @@
 import { h, clear } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { toast } from '../ui/toast.js';
+import { openSheet } from '../ui/dialog.js';
 import { state, subscribe, setSettings, currentSource } from '../state.js';
 import * as db from '../db.js';
-import { resolveItem, drumVersion, vocesVersion, SECTION_SHORT } from '../library/library.js';
+import { resolveItem, drumVersion, vocesVersion, SECTION_SHORT, SECTION_LABEL } from '../library/library.js';
 import { loadSongDoc } from '../chordpro/song-doc.js';
 import { firstChord } from '../chordpro/parser.js';
 import { renderSong } from '../viewers/chordpro-view.js';
@@ -11,14 +12,14 @@ import { createPageStack } from '../viewers/page-stack.js';
 import { createPager } from '../viewers/pager.js';
 import { parseKey, semitoneDiff } from '../music/chords.js';
 import { makeChordTransformer, keyName, shiftKey } from '../music/transpose.js';
-import { createAutoScroller, SPEED_MIN } from '../features/autoscroll.js';
+import { createAutoScroller, SPEED_MIN, SPEED_MAX } from '../features/autoscroll.js';
 import { listenPedal } from '../features/pedal.js';
 import { keepAwake } from '../features/wakelock.js';
-import { listenButton } from '../features/listen.js';
+import { openListen } from '../features/listen.js';
 import { attachSongSwipe } from '../features/swipe.js';
 import { enterImmersive, exitImmersive, isImmersive, onImmersiveChange } from '../features/immersive.js';
 import { ensureBlob } from '../sync/sync.js';
-import { link, emptyState } from '../ui/components.js';
+import { link, emptyState, prettyKey } from '../ui/components.js';
 
 const FONT_MIN = 0.7;
 const FONT_MAX = 2.4;
@@ -32,6 +33,11 @@ function songUrl(list, index, song, { ver, atEnd } = {}) {
   );
 }
 
+/**
+ * Vista de una canción. No hay barras fijas: los controles flotan sobre la
+ * letra en cápsulas de cristal y se ocultan al desplazar hacia abajo
+ * (reaparecen al tocar o al subir).
+ */
 export function SongView({ section, id, query, backHref }) {
   const lib = state.library;
   const list = query.get('lista') ? lib.lists.find((l) => l.id === query.get('lista')) : null;
@@ -86,88 +92,119 @@ export function SongView({ section, id, query, backHref }) {
   const cleanups = [];
   const scroller = h('div.song-scroll', { tabindex: '-1' });
   const paper = h('div.song-paper');
-  const controls = h('footer.song-controls', { 'aria-label': 'Controles' });
-  const chips = h('div.song-chips');
   scroller.append(paper);
+
+  // ---------- Cápsulas flotantes
+  const capText = h(
+    'div.cap-text',
+    h('strong', song.title),
+    h('span', list ? `${list.name} · ${index + 1} de ${list.items.length}` : SECTION_SHORT[song.section]),
+  );
+  const centerCap = h(
+    'div.glass-cap.center-cap',
+    list ? h('button.cap-btn', { 'aria-label': 'Canción anterior', disabled: !prev, onclick: () => go(prev) }, icon('prev', { size: 20 })) : null,
+    capText,
+    list ? h('button.cap-btn', { 'aria-label': 'Canción siguiente', disabled: !next, onclick: () => go(next) }, icon('next', { size: 20 })) : null,
+  );
+  const listenBtn = h(
+    'button.cap-btn',
+    {
+      'aria-label': song.link ? 'Escuchar' : 'Escuchar (esta canción no tiene enlace)',
+      title: song.link ? 'Escuchar' : 'Sin enlace para escuchar',
+      disabled: !song.link,
+      onclick: () => song.link && openListen(song.link),
+    },
+    icon('headphones', { size: 21 }),
+  );
+  const moreBtn = h('button.cap-btn', { 'aria-label': 'Más opciones', onclick: () => moreSheet() }, icon('more', { size: 21 }));
+  const notes = h(
+    'div.float-notes',
+    fallback ? h('div.note-pill.warn', icon('alert', { size: 15 }), 'Sin versión de batería: se muestra la de voces') : null,
+    item?.notes ? h('div.note-pill', icon('text', { size: 15 }), item.notes) : null,
+  );
+  const topFloat = h(
+    'div.float-top',
+    h('div.float-row', h('a.glass-btn.circle', { href: back, 'aria-label': 'Volver' }, icon('back', { size: 22 })), centerCap, h('div.glass-cap', listenBtn, moreBtn)),
+    notes,
+  );
+
+  const controls = h('div.glass-cap.controls-cap', { role: 'toolbar', 'aria-label': 'Controles' });
+  const goldBtn = h('button.gold-btn', { 'aria-label': 'Desplazamiento automático', hidden: true });
+  const speedValue = h('span.cap-value');
+  const speedCap = h(
+    'div.glass-cap.speed-cap',
+    { 'aria-label': 'Velocidad' },
+    h('button.cap-btn', { 'aria-label': 'Más lento', onclick: () => setSpeed(-1) }, icon('minus', { size: 18 })),
+    speedValue,
+    h('button.cap-btn', { 'aria-label': 'Más rápido', onclick: () => setSpeed(1) }, icon('plus', { size: 18 })),
+  );
+  const nextPill = list && next ? h('button.glass-cap.next-pill', { onclick: () => go(next) }, h('span', 'Siguiente: ', h('strong', next.song.title)), icon('next', { size: 15 })) : null;
+  const bottomFloat = h('div.float-bottom', speedCap, nextPill, h('div.float-row', controls, goldBtn));
 
   const screen = h(
     'div.song-screen',
     { style: { '--fs': state.settings.fontScale } },
-    h(
-      'header.song-top',
-      h('a.icon-btn', { href: back, 'aria-label': 'Volver' }, icon('back')),
-      h(
-        'div.song-titles',
-        h('h1', song.title),
-        h(
-          'p',
-          [
-            list ? `${list.name} · ${index + 1}/${list.items.length}` : null,
-            song.artist || null,
-            h('span.section-tag', SECTION_SHORT[song.section]),
-          ]
-            .filter(Boolean)
-            .flatMap((x, i) => (i ? [' · ', x] : [x])),
-        ),
-      ),
-      otherHref
-        ? h('a.icon-btn.alt-version', { href: otherHref, 'aria-label': `Ver versión de ${SECTION_SHORT[other.section]}`, title: `Versión de ${SECTION_SHORT[other.section]}` }, icon(other.section === 'bateria' ? 'drum' : 'mic'))
-        : null,
-      list
-        ? h(
-            'div.song-nav',
-            h('button.icon-btn', { 'aria-label': 'Canción anterior', disabled: !prev, onclick: () => go(prev) }, icon('prev')),
-            h('button.icon-btn', { 'aria-label': 'Canción siguiente', disabled: !next, onclick: () => go(next) }, icon('next')),
-          )
-        : null,
-    ),
-    fallback ? h('div.song-banner.warn', icon('alert', { size: 16 }), 'No hay versión de batería: se muestra la de voces.') : null,
-    item?.notes ? h('div.song-banner', icon('text', { size: 16 }), item.notes) : null,
     scroller,
-    controls,
+    h('div.fade-top', { 'aria-hidden': 'true' }),
+    h('div.fade-bottom', { 'aria-hidden': 'true' }),
+    topFloat,
+    bottomFloat,
+  );
+  const setControls = (...groups) => {
+    const parts = groups.filter(Boolean);
+    controls.replaceChildren(...parts.flatMap((g, i) => (i ? [h('span.cap-sep'), g] : [g])));
+  };
+
+  // ---------- Mostrar/ocultar los controles
+  const showChrome = () => screen.classList.remove('chrome-hidden');
+  const hideChrome = () => screen.classList.add('chrome-hidden');
+  let lastTop = 0;
+  scroller.addEventListener(
+    'scroll',
+    () => {
+      const top = scroller.scrollTop;
+      if (top < 40) showChrome();
+      else if (top > lastTop + 6) hideChrome();
+      else if (top < lastTop - 12 && !scrollerApi.running) showChrome();
+      lastTop = top;
+    },
+    { passive: true },
   );
 
-  // ---- Pantalla completa (API real en Android/escritorio; en iPhone se ocultan las barras)
-  const fsBtn = h('button.ctl-btn', { onclick: () => (isImmersive() ? exitImmersive() : enterImmersive()) });
+  // ---------- Pantalla completa (API real en Android; en iPhone se oculta la interfaz)
   const syncImmersive = () => {
     const on = isImmersive();
     screen.classList.toggle('immersive', on);
-    screen.classList.toggle('chrome-hidden', on);
-    fsBtn.replaceChildren(icon(on ? 'shrink' : 'expand', { size: 20 }));
-    fsBtn.setAttribute('aria-label', on ? 'Salir de pantalla completa' : 'Pantalla completa');
-    fsBtn.title = fsBtn.getAttribute('aria-label');
+    if (on) hideChrome();
+    else showChrome();
   };
   syncImmersive();
   cleanups.push(onImmersiveChange(syncImmersive));
-  const moreGroup = () => group('Más', [listenButton(song.link, { compact: true }), fsBtn], 'more');
 
-  // ---- Desplazamiento automático
-  const speedLabel = h('span.ctl-value');
-  const playBtn = h('button.ctl-btn.play', { 'aria-label': 'Desplazamiento automático' });
+  // ---------- Desplazamiento automático
   const scrollerApi = createAutoScroller(scroller, {
     onChange: (a) => {
-      playBtn.replaceChildren(icon(a.running ? 'pause' : 'play', { size: 22 }));
-      playBtn.classList.toggle('on', a.running);
-      playBtn.setAttribute('aria-pressed', String(a.running));
-      speedLabel.textContent = String(a.speed);
+      goldBtn.replaceChildren(icon(a.running ? 'pause' : 'play', { size: 24 }));
+      goldBtn.classList.toggle('on', a.running);
+      goldBtn.setAttribute('aria-pressed', String(a.running));
+      speedValue.textContent = String(a.speed);
       screen.classList.toggle('scrolling', a.running);
+      if (a.running) screen.classList.add('scrolled-once'); // desde ahora se muestra la velocidad
     },
   });
   scrollerApi.setSpeed(6);
-  playBtn.onclick = () => scrollerApi.toggle();
+  goldBtn.onclick = (e) => {
+    e.stopPropagation();
+    scrollerApi.toggle();
+    if (scrollerApi.running) hideChrome();
+  };
   const setSpeed = (d) => {
-    scrollerApi.setSpeed(scrollerApi.speed + d);
+    scrollerApi.setSpeed(Math.max(SPEED_MIN, Math.min(SPEED_MAX, scrollerApi.speed + d)));
     db.prefPatch(song.key, { speed: scrollerApi.speed });
   };
-  const scrollGroup = group('Desplazar', [
-    playBtn,
-    btn('minus', 'Más lento', () => setSpeed(-1), scrollerApi.speed <= SPEED_MIN),
-    speedLabel,
-    btn('plus', 'Más rápido', () => setSpeed(1)),
-  ]);
   cleanups.push(() => scrollerApi.destroy());
 
-  // ---- Toque en la partitura: muestra/oculta controles o pausa
+  // ---------- Toque en la partitura: muestra/oculta controles o pausa
   let down = null;
   scroller.addEventListener('pointerdown', (e) => {
     down = e.isPrimary ? { x: e.clientX, y: e.clientY, t: performance.now() } : null;
@@ -180,13 +217,13 @@ export function SongView({ section, id, query, backHref }) {
     if (moved > 10 || !fast || stack?.pinching || pager?.busy) return;
     if (scrollerApi.running) {
       scrollerApi.stop();
-      screen.classList.remove('chrome-hidden');
+      showChrome();
     } else {
       screen.classList.toggle('chrome-hidden');
     }
   });
 
-  // ---- Pedal / teclado
+  // ---------- Pedal / teclado
   const atBottom = () => scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 4;
   const atTop = () => scroller.scrollTop <= 2;
   const page = (dir) => scroller.scrollBy({ top: dir * scroller.clientHeight * 0.8, behavior: 'smooth' });
@@ -214,7 +251,7 @@ export function SongView({ section, id, query, backHref }) {
   );
   cleanups.push(keepAwake());
 
-  // ---- Deslizar en horizontal: canción anterior/siguiente (no en el visor por páginas)
+  // ---------- Deslizar en horizontal: canción anterior/siguiente (no en el visor por páginas)
   const swipeHint = h('div.swipe-hint', { 'aria-hidden': 'true' });
   screen.append(swipeHint);
   if (list) {
@@ -229,20 +266,58 @@ export function SongView({ section, id, query, backHref }) {
     );
   }
 
-  // ---- Final de la canción
+  // ---------- Final de la canción
   const endBlock = () =>
     list
       ? h(
           'div.song-end',
           next
-            ? h('button.btn.primary', { onclick: () => go(next) }, 'Siguiente: ', h('strong', next.song.title), icon('next', { size: 18 }))
+            ? h('button.btn.tinted', { onclick: () => go(next) }, 'Siguiente: ', h('strong', next.song.title), icon('next', { size: 16 }))
             : h('p.muted', 'Fin de la lista'),
         )
       : h('div.song-end');
 
   let stack = null;
   let pager = null;
-  const setControls = (...groups) => controls.replaceChildren(...groups.filter(Boolean));
+
+  // ---------- Hoja «Más»: opciones menos frecuentes
+  const moreRows = []; // funciones que devuelven filas extra según el tipo de canción
+  function stepper(label, value, onMinus, onPlus) {
+    const v = h('span.step-value', value());
+    const upd = () => (v.textContent = value());
+    return h(
+      'div.sheet-row',
+      h('span.sheet-row-label', label),
+      h(
+        'div.stepper',
+        h('button.step-btn', { 'aria-label': `${label}: menos`, onclick: () => (onMinus(), upd()) }, icon('minus', { size: 18 })),
+        v,
+        h('button.step-btn', { 'aria-label': `${label}: más`, onclick: () => (onPlus(), upd()) }, icon('plus', { size: 18 })),
+      ),
+    );
+  }
+  function moreSheet() {
+    const rows = [
+      ...moreRows.map((f) => f(stepper)),
+      song.kind === 'chordpro' || stack ? stepper('Velocidad de desplazamiento', () => String(scrollerApi.speed), () => setSpeed(-1), () => setSpeed(1)) : null,
+      h(
+        'button.sheet-row.action',
+        { onclick: () => (s.close(), isImmersive() ? exitImmersive() : enterImmersive()) },
+        icon(isImmersive() ? 'shrink' : 'expand', { size: 20 }),
+        h('span.sheet-row-label', isImmersive() ? 'Salir de pantalla completa' : 'Pantalla completa'),
+      ),
+      otherHref
+        ? h(
+            'a.sheet-row.action',
+            { href: otherHref, onclick: () => s.close() },
+            icon(other.section === 'bateria' ? 'drum' : 'mic', { size: 20 }),
+            h('span.sheet-row-label', `Ver versión de ${SECTION_LABEL[other.section].toLowerCase()}`),
+            icon('next', { size: 16, cls: 'icon chev' }),
+          )
+        : null,
+    ];
+    const s = openSheet({ title: song.title, subtitle: [song.artist, SECTION_LABEL[song.section]].filter(Boolean).join(' · '), body: [h('div.group.sheet-group', rows)] });
+  }
 
   async function init() {
     const prefs = await db.prefGet(song.key);
@@ -251,7 +326,7 @@ export function SongView({ section, id, query, backHref }) {
     else await initPages(prefs);
   }
 
-  // ---- ChordPro
+  // ---------- ChordPro
   async function initChordPro(prefs) {
     const file = state.files.find((f) => f.path === song.path);
     const doc = loadSongDoc(file?.text ?? '', song.ext);
@@ -267,31 +342,37 @@ export function SongView({ section, id, query, backHref }) {
     let capo = prefs.capo ?? fileCapo;
     const hasChords = doc.meta.hasChords;
 
+    const head = h('header.song-head');
     const body = h('div.song-body');
-    paper.replaceChildren(chips, body, endBlock());
+    paper.replaceChildren(head, body, endBlock());
     paper.classList.toggle('lyrics-only', state.settings.lyricsOnly && hasChords);
 
-    const keyBtn = h('button.ctl-value.wide', { title: 'Volver al tono original' });
-    const capoLabel = h('span.ctl-value');
+    const keyValue = h('button.cap-value.key-value', { title: 'Volver al tono original' });
     const draw = () => {
       const shift = transpose - (capo - fileCapo);
       const notation = state.settings.notation;
       const chordFn = makeChordTransformer({ semitones: shift, notation, targetKey: shiftKey(written, shift) });
       body.replaceChildren(renderSong(doc, { chord: chordFn }));
 
-      const sounding = written ? keyName(written, transpose + fileCapo, notation) : '';
-      const rel = transpose === 0 ? '' : ` (${transpose > 0 ? '+' : ''}${transpose})`;
-      keyBtn.textContent = sounding ? sounding + rel : (transpose > 0 ? '+' : '') + transpose;
-      keyBtn.disabled = transpose === defaultTranspose;
-      capoLabel.textContent = String(capo);
+      const sounding = written ? prettyKey(keyName(written, transpose + fileCapo, notation)) : '';
+      keyValue.textContent = sounding || (transpose > 0 ? '+' : '') + transpose;
+      keyValue.disabled = transpose === defaultTranspose;
+      keyValue.setAttribute('aria-label', `Tono ${sounding}. Toca para volver al original`);
 
-      clear(chips);
-      if (sounding) chips.append(chip('Tono', sounding, listTarget && transpose === listShift ? 'de la lista' : ''));
-      if (capo > 0 && written) chips.append(chip('Capo', String(capo), `formas de ${keyName(written, shift, notation)}`));
-      if (doc.meta.tempo) chips.append(chip('Tempo', `${doc.meta.tempo} bpm`));
-      if (doc.meta.time) chips.append(chip('Compás', doc.meta.time));
-      if (doc.meta.duration) chips.append(chip('Duración', doc.meta.duration));
-      if (doc.meta.subtitle) chips.prepend(h('p.song-subtitle', doc.meta.subtitle));
+      const meta = [];
+      if (sounding) meta.push(`Tono ${sounding}${transpose !== defaultTranspose ? ` (${transpose > 0 ? '+' : ''}${transpose})` : listTarget && transpose === listShift ? ' de la lista' : ''}`);
+      if (capo > 0 && written) meta.push(`Capo ${capo}, formas de ${prettyKey(keyName(written, shift, notation))}`);
+      if (doc.meta.tempo) meta.push(`${doc.meta.tempo} bpm`);
+      if (doc.meta.time) meta.push(doc.meta.time);
+      if (doc.meta.duration) meta.push(doc.meta.duration);
+      head.replaceChildren(
+        ...[
+          h('h1.song-title', doc.meta.title || song.title),
+          doc.meta.subtitle ? h('p.song-subtitle', doc.meta.subtitle) : null,
+          song.artist ? h('p.song-artist', song.artist) : null,
+          meta.length ? h('p.song-meta', meta.join(' · ')) : null,
+        ].filter(Boolean),
+      );
     };
     const saveTranspose = () => (ctxKey ? db.prefPatch(ctxKey, { transpose }) : db.prefPatch(song.key, { transpose }));
     const setT = (d) => {
@@ -299,7 +380,7 @@ export function SongView({ section, id, query, backHref }) {
       saveTranspose();
       draw();
     };
-    keyBtn.onclick = () => {
+    keyValue.onclick = () => {
       transpose = defaultTranspose;
       saveTranspose();
       draw();
@@ -311,29 +392,48 @@ export function SongView({ section, id, query, backHref }) {
     };
 
     const lyricsBtn = h(
-      'button.ctl-btn.toggle',
+      'button.cap-btn.text-btn',
       {
         'aria-pressed': String(state.settings.lyricsOnly),
         onclick: () => setSettings({ lyricsOnly: !state.settings.lyricsOnly }),
       },
-      icon('lyrics', { size: 20 }),
-      h('span', 'Solo letra'),
+      'Solo letra',
     );
+    const fontBtn = h('button.cap-btn.text-btn.aa', { 'aria-label': 'Tamaño de letra', 'aria-expanded': 'false', onclick: () => toggleFont() }, h('span.a-small', 'A'), h('span.a-big', 'A'));
+    const fontCap = h(
+      'div.glass-cap.font-cap',
+      { hidden: true },
+      h('button.cap-btn', { 'aria-label': 'Letra más pequeña', onclick: () => setFont(-0.1) }, h('span.a-small', 'A')),
+      h('span.cap-value.font-value'),
+      h('button.cap-btn', { 'aria-label': 'Letra más grande', onclick: () => setFont(0.1) }, h('span.a-big', 'A')),
+    );
+    const paintFont = () => (fontCap.querySelector('.font-value').textContent = Math.round(state.settings.fontScale * 100) + '%');
+    function toggleFont() {
+      fontCap.hidden = !fontCap.hidden;
+      fontBtn.setAttribute('aria-expanded', String(!fontCap.hidden));
+      paintFont();
+    }
+    bottomFloat.prepend(fontCap);
 
     setControls(
-      hasChords && written ? group('Tono', [btn('minus', 'Bajar medio tono', () => setT(-1)), keyBtn, btn('plus', 'Subir medio tono', () => setT(1))], 'key') : null,
-      hasChords ? group('Capo', [btn('minus', 'Quitar traste de capo', () => setCapo(-1)), capoLabel, btn('plus', 'Añadir traste de capo', () => setCapo(1))]) : null,
-      hasChords ? group('Acordes', [lyricsBtn]) : null,
-      group('Letra', [btn('minus', 'Letra más pequeña', () => setFont(-0.1), false, 'A'), btn('plus', 'Letra más grande', () => setFont(0.1), false, 'A')], 'font'),
-      scrollGroup,
-      moreGroup(),
+      hasChords && written
+        ? h('div.cap-group', h('button.cap-btn', { 'aria-label': 'Bajar medio tono', onclick: () => setT(-1) }, icon('minus', { size: 18 })), keyValue, h('button.cap-btn', { 'aria-label': 'Subir medio tono', onclick: () => setT(1) }, icon('plus', { size: 18 })))
+        : null,
+      fontBtn,
+      hasChords ? lyricsBtn : null,
     );
+    goldBtn.hidden = false;
+    if (hasChords) {
+      moreRows.push((stepperRow) => stepperRow('Capo', () => (capo ? `Traste ${capo}` : 'Sin capo'), () => setCapo(-1), () => setCapo(1)));
+    }
+    moreRows.push((stepperRow) => stepperRow('Tamaño de letra', () => Math.round(state.settings.fontScale * 100) + '%', () => setFont(-0.1), () => setFont(0.1)));
 
     const unsub = subscribe((what) => {
       if (what !== 'settings') return;
       screen.style.setProperty('--fs', state.settings.fontScale);
       paper.classList.toggle('lyrics-only', state.settings.lyricsOnly && hasChords);
       lyricsBtn.setAttribute('aria-pressed', String(state.settings.lyricsOnly));
+      paintFont();
       draw();
     });
     cleanups.push(unsub);
@@ -346,11 +446,10 @@ export function SongView({ section, id, query, backHref }) {
     setSettings({ fontScale: v });
   };
 
-  // ---- PDF e imágenes
+  // ---------- PDF e imágenes
   async function initPages(prefs) {
     paper.classList.add('pages-paper');
     paper.replaceChildren(h('div.loading', 'Abriendo partitura…'));
-    setControls(moreGroup());
     let blobs;
     try {
       blobs = await Promise.all(song.paths.map((p) => ensureBlob(currentSource(), p)));
@@ -374,9 +473,9 @@ export function SongView({ section, id, query, backHref }) {
         ? (await import('../viewers/pdf-view.js')).pdfPages(blobs[0])
         : (await import('../viewers/image-view.js')).imagePages(blobs);
 
-    const zoomLabel = h('button.ctl-value.wide', { title: 'Ajustar al ancho' });
+    const zoomValue = h('button.cap-value.zoom-value', { title: 'Ajustar al ancho' });
     const showZoom = (z) => {
-      zoomLabel.textContent = Math.round(z * 100) + '%';
+      zoomValue.textContent = Math.round(z * 100) + '%';
     };
     const saveZoom = (z) => {
       showZoom(z);
@@ -418,9 +517,8 @@ export function SongView({ section, id, query, backHref }) {
       }
       showZoom(viewer().zoom);
       const modeBtn = h(
-        'button.ctl-btn.toggle',
+        'button.cap-btn.text-btn',
         {
-          'aria-pressed': String(paged),
           title: paged ? 'Ver en continuo' : 'Ver página a página',
           onclick: async () => {
             await setSettings({ pageMode: paged ? 'scroll' : 'paged' });
@@ -428,17 +526,21 @@ export function SongView({ section, id, query, backHref }) {
             mount();
           },
         },
-        icon(paged ? 'pages' : 'scrollV', { size: 20 }),
+        icon(paged ? 'pages' : 'scrollV', { size: 19 }),
         h('span', paged ? 'Páginas' : 'Continuo'),
       );
       setControls(
-        group('Zoom', [btn('zoomOut', 'Alejar', () => viewer().setZoom(viewer().zoom / 1.2)), zoomLabel, btn('zoomIn', 'Acercar', () => viewer().setZoom(viewer().zoom * 1.2))], 'zoom'),
-        group('Vista', [modeBtn]),
-        paged ? null : scrollGroup,
-        moreGroup(),
+        h(
+          'div.cap-group',
+          h('button.cap-btn', { 'aria-label': 'Alejar', onclick: () => viewer().setZoom(viewer().zoom / 1.2) }, icon('minus', { size: 18 })),
+          zoomValue,
+          h('button.cap-btn', { 'aria-label': 'Acercar', onclick: () => viewer().setZoom(viewer().zoom * 1.2) }, icon('plus', { size: 18 })),
+        ),
+        modeBtn,
       );
+      goldBtn.hidden = paged;
     }
-    zoomLabel.onclick = () => viewer()?.setZoom(1);
+    zoomValue.onclick = () => viewer()?.setZoom(1);
     cleanups.push(() => {
       pager?.destroy();
       stack?.destroy();
@@ -461,20 +563,4 @@ export function SongView({ section, id, query, backHref }) {
       cleanups.forEach((fn) => fn());
     },
   };
-}
-
-function btn(iconName, label, onclick, disabled = false, text = '') {
-  return h(
-    'button.ctl-btn',
-    { 'aria-label': label, title: label, onclick, disabled },
-    text ? h('span.ctl-letter', { class: iconName === 'plus' ? 'big' : 'small' }, text) : icon(iconName, { size: 20 }),
-  );
-}
-
-function group(label, children, cls = '') {
-  return h(`div.ctl-group${cls ? '.' + cls : ''}`, { role: 'group', 'aria-label': label }, h('span.ctl-label', label), h('div.ctl-row', children));
-}
-
-function chip(label, value, note = '') {
-  return h('span.meta-chip', h('span.meta-label', label), h('strong', value), note ? h('span.meta-note', note) : null);
 }

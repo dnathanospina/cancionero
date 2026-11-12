@@ -15,8 +15,13 @@ export function h(tag, props, ...children) {
   const el = document.createElement(name || 'div');
   if (id) el.id = id;
   if (classes.length) el.className = classes.join(' ');
+  let value;
   for (const [k, v] of Object.entries(props)) {
     if (v == null || v === false) continue;
+    if (k === 'value') {
+      value = v; // se asigna al final (textarea/select necesitan su contenido antes)
+      continue;
+    }
     if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
     else if (k === 'class') el.className = [el.className, v].filter(Boolean).join(' ');
     else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
@@ -25,6 +30,7 @@ export function h(tag, props, ...children) {
     else el.setAttribute(k, v === true ? '' : v);
   }
   append(el, children);
+  if (value !== undefined) el.value = value;
   return el;
 }
 

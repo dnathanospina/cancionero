@@ -1,0 +1,6 @@
+nombre: Reunión de oración
+fecha: @domingo+3
+hora: 19:30
+
+Amazing Grace
+Santo santo santo

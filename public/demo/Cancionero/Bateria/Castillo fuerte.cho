@@ -1,0 +1,37 @@
+{title: Castillo fuerte es nuestro Dios}
+{subtitle: Batería · marcha solemne}
+{tempo: 76}
+{time: 4/4}
+{duration: 3:40}
+
+{c: Intro · 4 compases}
+{ci: Toms en negras con crescendo. Platillo en el 1 del compás 4.}
+
+{start_of_tab: Ritmo A · estrofas (aro + charles)}
+       1 . & . 2 . & . 3 . & . 4 . & .
+Ch   | x . x . x . x . x . x . x . x . |
+Aro  | . . . . o . . . . . . . o . . . |
+Bom  | o . . . . . o . o . . . . . . . |
+{end_of_tab}
+
+{start_of_tab: Ritmo B · última estrofa (ride + caja)}
+       1 . & . 2 . & . 3 . & . 4 . & .
+Ride | x . x . x . x . x . x . x . x . |
+Caja | . . . . O . . . . . . . O . . . |
+Bom  | o . . . . . o . o . o . . . . . |
+{end_of_tab}
+
+{c: Estrofa 1 · Ritmo A suave}
+{ci: «Castillo fuerte es nuestro Dios…»  — 18 compases}
+
+{c: Estrofa 2 · Ritmo A + platillo cada 4 compases}
+{ci: «Nuestro valor es nada aquí…»}
+
+{c: Interludio · 2 compases}
+{ci: Redoble en caja (semicorcheas) con crescendo hacia la estrofa 4.}
+
+{c: Estrofa 4 · Ritmo B}
+{ci: «Esa palabra del Señor…» — tutti, más fuerte}
+
+{c: Final}
+{ci: Ritardando en «de Dios el Reino eterno». Último acorde: platillos + timbal, dejar sonar.}

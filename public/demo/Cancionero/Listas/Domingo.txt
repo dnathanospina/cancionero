@@ -1,0 +1,12 @@
+# Lista de ejemplo. En la demostración, @domingo se sustituye por la fecha del
+# próximo domingo; en las listas reales escribe la fecha: 2026-11-15
+nombre: Culto dominical
+fecha: @domingo
+hora: 11:00
+notas: Santa cena al final. Ensayo a las 10:00.
+
+Castillo fuerte | tono: D
+Santo santo santo | tono: Eb | notas: estrofa 2 solo piano
+Blessed Assurance
+Amazing Grace | tono: A
+Doxología | notas: todos de pie

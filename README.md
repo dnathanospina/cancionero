@@ -172,6 +172,28 @@ el botón «Escuchar» está desactivado porque no hay enlaces reales. Los acord
 arreglos propios. En las listas de demostración, `@domingo` se sustituye por la fecha del próximo
 domingo para que siempre haya un evento próximo.
 
+## Diseño
+
+Estilo iOS sobrio, con «liquid glass»:
+
+- **Tipografía del sistema** (San Francisco en Apple, Roboto en Android). Cabin solo para la marca «Bethel».
+- **Títulos grandes** que se encogen en la barra superior al desplazar.
+- **Fondo agrupado** `#F2F2F7` con listas blancas de esquinas redondeadas. Separadores finos y tonalidades en
+  texto gris a la derecha («Re», «Mi♭»).
+- **Dorado solo como acento:** `#DDA60D` en rellenos (punto del próximo culto, «Empezar», desplazamiento) y
+  `#8A6400` en texto y acordes. En oscuro: negro puro, tarjetas `#1C1C1E` y acento `#E8B630`.
+- **Cristal:**
+  - La barra de pestañas es una cápsula flotante de cristal.
+  - En la canción no hay barras fijas: volver, título, Escuchar/Más y los controles (tono, tamaño, solo
+    letra) flotan sobre la letra. Se ocultan al desplazar hacia abajo y vuelven al tocar o al subir.
+  - El desplazamiento automático es un botón dorado redondo. Capo, velocidad, tamaño de letra, pantalla
+    completa y la otra versión están en «Más».
+- **Fondos sólidos equivalentes** sustituyen al cristal si el sistema tiene «Reducir transparencia», si el
+  navegador no admite `backdrop-filter` o en dispositivos lentos (`deviceMemory ≤ 4`, o `≤ 4` núcleos
+  fuera de Apple). Se puede forzar en *Ajustes → Efecto cristal*.
+- **Movimiento reducido:** se respeta `prefers-reduced-motion`.
+- **Objetivos táctiles** de 44 px como mínimo.
+
 ## Logo
 
 Copia el logo a `public/brand/` y pon su ruta en `src/config.js` (`logo`).

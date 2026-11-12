@@ -23,7 +23,7 @@ function summary(title, text, path, others = null) {
       l.items.map((it) => {
         const t = findSong(state.library, 'voces', it.name)?.title ?? it.name;
         const changed = otherNames && !otherNames.includes(it.name.toLowerCase());
-        return h('li', { class: changed ? 'diff' : '' }, t, it.key ? h('span.chip.key', displayKey(it.key)) : null);
+        return h('li', { class: changed ? 'diff' : '' }, t, it.key ? h('span.key-text', displayKey(it.key)) : null);
       }),
     ),
   );

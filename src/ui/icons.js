@@ -2,7 +2,7 @@ import { svg } from './dom.js';
 
 /** Iconos de trazo (24×24) dibujados para esta app. */
 const P = {
-  home: ['M3 11.5 12 4l9 7.5', 'M5.5 9.5V20h13V9.5', 'M10 20v-5.5h4V20'],
+  home: ['M3.5 11 12 4l8.5 7', 'M5.5 9.5V20h13V9.5', 'M10 20v-5h4v5'],
   music: ['M9 18V5l11-2v13', 'M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z', 'M20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z'],
   list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3.5 6h.01', 'M3.5 12h.01', 'M3.5 18h.01'],
   settings: [
@@ -40,6 +40,7 @@ const P = {
   pages: ['M3 6h11v13H3z', 'M8 3h13v13'],
   scrollV: ['M7 4h10v16H7z', 'M12 8v8', 'M10 14l2 2 2-2'],
   tag: ['M3 12V4h8l9 9-8 8-9-9Z', 'M7.5 8h.01'],
+  more: ['M5.5 12h.01', 'M12 12h.01', 'M18.5 12h.01'],
   lock: ['M6 11h12v9H6z', 'M8.5 11V8a3.5 3.5 0 0 1 7 0v3'],
   unlock: ['M6 11h12v9H6z', 'M8.5 11V8a3.5 3.5 0 0 1 6.8-1.2'],
   grip: ['M9 6h.01', 'M15 6h.01', 'M9 12h.01', 'M15 12h.01', 'M9 18h.01', 'M15 18h.01'],

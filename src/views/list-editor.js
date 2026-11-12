@@ -388,7 +388,7 @@ export function ListEditorView({ mode, id, query }) {
             },
             h('span.pick-check', idx >= 0 ? h('span', String(idx + 1)) : already ? icon('check', { size: 16 }) : null),
             h('span.row-main', h('span.row-title', song.title), h('span.row-sub', already ? h('span.accent', 'Ya está en la lista') : null, song.artist ? h('span', song.artist) : null), badges(song)),
-            song.songKey ? h('span.chip.key', displayKey(song.songKey)) : null,
+            song.songKey ? h('span.key-text', displayKey(song.songKey)) : null,
           ),
         );
       }

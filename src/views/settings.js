@@ -12,6 +12,7 @@ import { upcomingLists } from '../library/library.js';
 import { currentSource, reloadLibrary, emitChange } from '../state.js';
 import * as db from '../db.js';
 import { WRITE_TARGET } from '../config.js';
+import { glassReason } from '../features/glass.js';
 import { linkReport, SECTION_LABEL } from '../library/library.js';
 import { pageHeader, link } from '../ui/components.js';
 import { timeAgo, plural } from '../ui/format.js';
@@ -39,7 +40,7 @@ function toggle(label, checked, onChange) {
   );
 }
 
-const card = (title, ...children) => h('section.set-card', h('h2', title), ...children);
+const card = (title, ...children) => h('section.set-card', h('h2.group-title', title), h('div.group.set-group', ...children));
 
 export function SettingsView() {
   const el = h('div.view.settings');
@@ -56,6 +57,11 @@ export function SettingsView() {
         row('Sección', 'Qué parte del cancionero ves por defecto.', segmented('Sección', s.section, [['voces', 'Voces'], ['bateria', 'Batería']], (v) => setSettings({ section: v }))),
         row('Notación de acordes', s.notation === 'latin' ? 'Do Re Mi Fa Sol La Si' : 'C D E F G A B', segmented('Notación', s.notation, [['american', 'C D E'], ['latin', 'Do Re Mi']], (v) => setSettings({ notation: v }))),
         row('Tema', null, segmented('Tema', s.theme, [['auto', 'Auto'], ['light', 'Claro'], ['dark', 'Oscuro']], (v) => setSettings({ theme: v }))),
+        row(
+          'Efecto cristal',
+          s.glass === 'auto' ? glassReason() : s.glass === 'on' ? 'Siempre activado.' : 'Desactivado: fondos sólidos (más ligero).',
+          segmented('Efecto cristal', s.glass, [['auto', 'Auto'], ['on', 'Sí'], ['off', 'No']], (v) => setSettings({ glass: v })),
+        ),
         row('Solo letra', 'Oculta los acordes (para cantantes).', toggle('Solo letra', s.lyricsOnly, (v) => setSettings({ lyricsOnly: v }))),
         row(
           'Tamaño de letra',
@@ -302,7 +308,7 @@ export function SettingsView() {
     // Revisión de nombres
     const rep = linkReport(state.library);
     const details = (title, items, fmt) =>
-      h('details.review', h('summary', h('span', title), h('span.chip', String(items.length))), items.length ? h('ul', items.slice(0, 200).map((x) => h('li', fmt(x)))) : h('p.muted', 'Todo correcto.'));
+      h('details.review', h('summary', h('span', title), h('span.count', String(items.length))), items.length ? h('ul', items.slice(0, 200).map((x) => h('li', fmt(x)))) : h('p.muted', 'Todo correcto.'));
     el.append(
       card(
         'Revisión de nombres',

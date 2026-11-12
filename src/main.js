@@ -1,6 +1,4 @@
-import '@fontsource/cabin/latin-600.css';
-import '@fontsource/open-sans/latin-400.css';
-import '@fontsource/open-sans/latin-700.css';
+import '@fontsource/cabin/latin-600.css'; // solo para la marca «Bethel»
 import './styles/base.css';
 import './styles/song.css';
 import './styles/editor.css';
@@ -9,7 +7,8 @@ import { h, clear } from './ui/dom.js';
 import { icon } from './ui/icons.js';
 import { toast } from './ui/toast.js';
 import { state, subscribe, loadSettings, reloadLibrary, runSync, setOnline } from './state.js';
-import { brandMark, sectionSwitch, link } from './ui/components.js';
+import { brandMark, link } from './ui/components.js';
+import { applyGlass } from './features/glass.js';
 import { setupInstall } from './features/install.js';
 import { exitImmersive } from './features/immersive.js';
 import { HomeView } from './views/home.js';
@@ -28,16 +27,19 @@ function applyTheme() {
   if (t === 'auto') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = t;
   const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  themeMeta?.setAttribute('content', dark ? '#000000' : '#ffffff');
+  themeMeta?.setAttribute('content', dark ? '#000000' : '#f2f2f7');
+  applyGlass(state.settings.glass);
 }
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
+matchMedia('(prefers-reduced-transparency: reduce)').addEventListener?.('change', applyTheme);
 
 // ---------- Estructura
 const app = document.getElementById('app');
-const appbarSync = h('button.icon-btn.sync-btn', { 'aria-label': 'Actualizar biblioteca', onclick: () => runSync() }, icon('refresh'));
+const appbarSync = h('button.glass-btn.circle.sync-btn', { 'aria-label': 'Actualizar biblioteca', onclick: () => runSync() }, icon('refresh', { size: 20 }));
 const offlineBadge = h('span.offline-badge', { hidden: true, title: 'Sin conexión' }, icon('wifiOff', { size: 16 }), h('span', 'Sin conexión'));
-const switchHost = h('div.appbar-switch');
-const appbar = h('header.appbar', h('div.appbar-inner', brandMark(), switchHost, h('div.appbar-actions', offlineBadge, appbarSync)));
+// Título pequeño que aparece en la barra al desplazar (como en iOS).
+const compactTitle = h('div.appbar-title', { 'aria-hidden': 'true' });
+const appbar = h('header.appbar', h('div.appbar-inner', brandMark(), compactTitle, h('div.appbar-actions', offlineBadge, appbarSync)));
 const progress = h('div.progress', { hidden: true }, h('div.progress-bar'));
 const main = h('main#view', { tabindex: '-1' });
 
@@ -53,6 +55,23 @@ const tabbar = h(
   TABS.map(([path, label, ic]) => h('a.tab', { href: link(path), dataset: { path } }, icon(ic), h('span', label))),
 );
 app.append(appbar, progress, main, tabbar);
+
+// ---------- Títulos grandes que se encogen al desplazar
+let titleObserver = null;
+function watchLargeTitle(view) {
+  titleObserver?.disconnect();
+  document.body.classList.remove('title-collapsed');
+  const h1 = view.el.querySelector('.page-head h1');
+  compactTitle.textContent = h1?.textContent ?? '';
+  if (!h1) return;
+  titleObserver = new IntersectionObserver(
+    ([e]) => document.body.classList.toggle('title-collapsed', !e.isIntersecting && e.boundingClientRect.top < 80),
+    { rootMargin: '-56px 0px 0px 0px', threshold: 0 },
+  );
+  titleObserver.observe(h1);
+}
+const onScroll = () => document.body.classList.toggle('scrolled', window.scrollY > 4);
+window.addEventListener('scroll', onScroll, { passive: true });
 
 // ---------- Rutas
 let current = null;
@@ -97,7 +116,9 @@ function route() {
   current = view;
   currentKey = path;
   document.body.classList.toggle('song-mode', !!view.fullscreen);
+  document.body.classList.toggle('editor-mode', view.el.classList.contains('list-editor'));
   clear(main).append(view.el);
+  watchLargeTitle(view);
 
   const tabPath = '/' + (parts[0] === 'lista' ? 'listas' : parts[0] === 'cancion' ? '' : parts[0] ?? '');
   for (const t of tabbar.children) {
@@ -107,6 +128,7 @@ function route() {
     else t.removeAttribute('aria-current');
   }
   if (!view.fullscreen) window.scrollTo(0, scrollMemory.get(path) ?? 0);
+  onScroll();
   view.focus?.();
   maybeApplyUpdate();
 }
@@ -122,9 +144,7 @@ function refresh() {
   route();
 }
 
-function renderChrome() {
-  clear(switchHost).append(sectionSwitch());
-}
+function renderChrome() {}
 
 subscribe((what) => {
   if (what === 'settings') {

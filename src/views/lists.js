@@ -1,6 +1,6 @@
 import { h } from '../ui/dom.js';
 import { state } from '../state.js';
-import { link, listCard, emptyState, pageHeader, songRow, displayKey, pendingChip } from '../ui/components.js';
+import { link, listCard, emptyState, pageHeader, songRow, displayKey, pendingChip, sectionSwitch } from '../ui/components.js';
 import { todayISO } from '../util/text.js';
 import { resolveItem, SECTION_LABEL } from '../library/library.js';
 import { longDate, relativeDay, plural } from '../ui/format.js';
@@ -20,7 +20,7 @@ function leaderBar() {
   if (!isLeader()) {
     return h(
       'div.leader-bar',
-      h('button.btn.ghost.small', { onclick: async () => (await requestLeader()) && refreshView() }, icon('lock', { size: 16 }), 'Editar listas'),
+      h('button.btn.tinted.small', { onclick: async () => (await requestLeader()) && refreshView() }, icon('lock', { size: 16 }), 'Editar listas'),
     );
   }
   const sunday = longDate(nextSundayISO());
@@ -30,7 +30,7 @@ function leaderBar() {
     h(
       'div.leader-actions',
       h('a.btn.primary', { href: link('/listas/nueva?plantilla=domingo') }, icon('plus', { size: 18 }), 'Nuevo domingo', h('small', sunday.replace(/^[^,]+, /, ''))),
-      h('a.btn.ghost', { href: link('/listas/nueva?plantilla=evento') }, icon('calendar', { size: 18 }), 'Evento especial'),
+      h('a.btn.tinted', { href: link('/listas/nueva?plantilla=evento') }, icon('calendar', { size: 18 }), 'Evento especial'),
     ),
   );
 }
@@ -52,7 +52,7 @@ function outboxBanner() {
     `div.banner${conflicts || errors ? '.alert' : ''}`,
     icon(conflicts || errors ? 'alert' : 'cloud', { size: 18 }),
     h('span', parts.join(' · '), pending && !navigator.onLine ? ' (sin conexión: se subirán solos)' : ''),
-    pending && navigator.onLine ? h('button.btn.small.ghost', { onclick: () => flushOutbox() }, 'Subir ahora') : null,
+    pending && navigator.onLine ? h('button.btn.small.tinted', { onclick: () => flushOutbox() }, 'Subir ahora') : null,
   );
 }
 
@@ -64,9 +64,9 @@ export function ListsView() {
   const past = lists.filter((l) => l.date && l.date < today);
   const el = h('div.view.lists', pageHeader('Listas', 'Preparadas para cada evento. Se actualizan para todo el equipo.'), leaderBar(), outboxBanner());
   if (!lists.length) el.append(emptyState('Todavía no hay listas', isLeader() ? 'Crea la primera con «Nuevo domingo».' : 'El líder de alabanza las prepara para cada evento.'));
-  if (upcoming.length) el.append(h('h3.section-title', 'Próximas'), h('div.cards', upcoming.map((l, i) => listCard(l, { featured: i === 0 }))));
-  if (undated.length) el.append(h('h3.section-title', 'Sin fecha'), h('div.cards', undated.map((l) => listCard(l))));
-  if (past.length) el.append(h('h3.section-title', 'Anteriores'), h('div.cards.past', past.map((l) => listCard(l))));
+  if (upcoming.length) el.append(h('h2.group-title', 'Próximas'), h('div.cards', upcoming.map((l, i) => listCard(l, { featured: i === 0 }))));
+  if (undated.length) el.append(h('h2.group-title', 'Sin fecha'), h('div.cards', undated.map((l) => listCard(l))));
+  if (past.length) el.append(h('h2.group-title', 'Anteriores'), h('div.cards.past', past.map((l) => listCard(l))));
   return { el };
 }
 
@@ -96,7 +96,7 @@ export function ListDetailView({ id }) {
           leader ? h('button.btn.small.primary', { onclick: () => conflictSheet(entry) }, 'Resolver') : h('span.muted', 'Entra en modo líder para resolverlo.'),
         )
       : entry.status === 'error'
-        ? h('div.banner.alert', icon('alert', { size: 18 }), h('span', `No se pudo subir: ${entry.error}`), h('button.btn.small.ghost', { onclick: () => retryEntry(entry.key) }, 'Reintentar'))
+        ? h('div.banner.alert', icon('alert', { size: 18 }), h('span', `No se pudo subir: ${entry.error}`), h('button.btn.small.tinted', { onclick: () => retryEntry(entry.key) }, 'Reintentar'))
         : h('div.banner', icon('cloud', { size: 18 }), h('span', navigator.onLine ? 'Subiendo los cambios…' : 'Guardada en este dispositivo. Se subirá sola al recuperar la conexión.'))
     : null;
 
@@ -122,27 +122,27 @@ export function ListDetailView({ id }) {
       h('h1', list.name, list.pending ? pendingChip(list.pending.status) : null),
       h('p.page-sub', rel ? h('strong.accent', rel + ' · ') : null, longDate(list.date), list.time ? ` · ${list.time}` : '', list.place ? ` · ${list.place}` : ''),
       list.notes ? h('p.list-notes', list.notes) : null,
-      h('p.page-sub', 'Mostrando la parte de ', h('strong', SECTION_LABEL[section])),
+      sectionSwitch(),
     ),
     h(
       'div.actions',
       first ? h('a.btn.primary', { href: songHref(list, first.i, first.song) }, icon('play', { size: 18 }), 'Empezar') : null,
       listenItems.some((x) => x.link)
-        ? h('button.btn.ghost', { onclick: () => openListenSheet(list, listenItems) }, icon('headphones', { size: 18 }), 'Escuchar la lista')
-        : h('button.btn.ghost', { disabled: true, title: 'Ninguna canción de la lista tiene enlace' }, icon('headphones', { size: 18 }), 'Sin enlaces para escuchar'),
+        ? h('button.btn.tinted', { onclick: () => openListenSheet(list, listenItems) }, icon('headphones', { size: 18 }), 'Escuchar la lista')
+        : h('button.btn.tinted', { disabled: true, title: 'Ninguna canción de la lista tiene enlace' }, icon('headphones', { size: 18 }), 'Sin enlaces para escuchar'),
     ),
     leader
       ? h(
           'div.leader-tools',
           h('span.leader-tag', icon('unlock', { size: 15 }), 'Modo líder'),
           h('a.btn.small.primary', { href: link('/listas/editar/' + encodeURIComponent(list.id)) }, icon('edit', { size: 16 }), 'Editar'),
-          h('a.btn.small.ghost', { href: link('/listas/duplicar/' + encodeURIComponent(list.id)) }, icon('copy', { size: 16 }), 'Duplicar'),
-          h('button.btn.small.ghost.danger-text', { onclick: remove }, icon('trash', { size: 16 }), 'Borrar'),
+          h('a.btn.small.tinted', { href: link('/listas/duplicar/' + encodeURIComponent(list.id)) }, icon('copy', { size: 16 }), 'Duplicar'),
+          h('button.btn.small.tinted.danger-text', { onclick: remove }, icon('trash', { size: 16 }), 'Borrar'),
         )
       : null,
     items.length
       ? h(
-          'div.rows.numbered',
+          'div.group.rows.numbered',
           items.map(({ it, i, song, fallback }) =>
             songRow(song ?? { title: it.name, kind: '' }, {
               href: song ? songHref(list, i, song) : undefined,

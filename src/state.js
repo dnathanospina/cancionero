@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS = {
   downloadAll: false,
   sundayTime: '11:00', // hora que propone la plantilla «Domingo»
   layout: DEFAULT_LAYOUT, // estructura de carpetas en OneDrive (fase 2b)
+  glass: 'auto', // efecto cristal: 'auto' | 'on' | 'off'
   pageMode: 'paged', // PDF/imágenes: 'paged' (página a página) o 'scroll' (continuo)
   source: 'demo',
 };

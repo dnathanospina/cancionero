@@ -7,17 +7,22 @@ import { BRAND } from '../config.js';
 import { parseKey } from '../music/chords.js';
 import { keyName } from '../music/transpose.js';
 
-/** Tonalidad en la notación elegida ("Re" → "D" si se usa la americana). */
+/** Sostenidos y bemoles tipográficos para mostrar tonalidades: «Mib» → «Mi♭». */
+export function prettyKey(name) {
+  return String(name ?? '').replace(/^([A-G]|Do|Re|Mi|Fa|Sol|La|Si)([#b])/, (_m, n, a) => n + (a === '#' ? '♯' : '♭'));
+}
+
+/** Tonalidad en la notación elegida ("Re" → "D" si se usa la americana), con ♯/♭. */
 export function displayKey(k) {
   const key = k ? parseKey(k) : null;
-  return key ? keyName(key, 0, state.settings.notation) : k || '';
+  return key ? prettyKey(keyName(key, 0, state.settings.notation)) : k || '';
 }
 
 export const link = (path) => '#' + path;
 
-/** Selector Voces | Batería (botón píldora segmentado). */
+/** Selector Voces | Batería (control segmentado de cristal). */
 export function sectionSwitch() {
-  const el = h('div.segmented', { role: 'tablist', 'aria-label': 'Sección' });
+  const el = h('div.segmented.glass-seg', { role: 'tablist', 'aria-label': 'Sección' });
   for (const [id, label] of Object.entries(SECTION_SHORT)) {
     el.append(
       h(
@@ -28,7 +33,6 @@ export function sectionSwitch() {
           class: state.settings.section === id ? 'on' : '',
           onclick: () => state.settings.section !== id && setSettings({ section: id }),
         },
-        icon(id === 'voces' ? 'mic' : 'drum', { size: 18 }),
         h('span', label),
       ),
     );
@@ -41,7 +45,6 @@ export function brandMark() {
     'a.brand',
     { href: link('/'), 'aria-label': `${BRAND.name} · Inicio` },
     BRAND.logo ? h('img.brand-logo', { src: BRAND.logo, alt: BRAND.name }) : h('span.brand-name', BRAND.name),
-    h('span.brand-sub', 'Cancionero'),
   );
 }
 
@@ -66,9 +69,10 @@ export function songRow(song, { href, number, keyLabel, note, warn } = {}) {
     ),
     h(
       'span.row-end',
-      keyLabel ? h('span.chip.key', keyLabel) : null,
-      song && KIND_BADGE[song.kind] ? h('span.chip.kind', KIND_BADGE[song.kind]) : null,
-      song?.origin === 'local' ? h('span.chip.kind', 'Local') : null,
+      song && KIND_BADGE[song.kind] ? h('span.kind', KIND_BADGE[song.kind]) : null,
+      song?.origin === 'local' ? h('span.kind', 'Local') : null,
+      keyLabel ? h('span.key-text', keyLabel) : null,
+      href ? icon('next', { size: 16, cls: 'icon chev' }) : null,
     ),
   );
 }
@@ -80,15 +84,15 @@ export function listCard(list, { featured = false } = {}) {
     { href: link('/lista/' + encodeURIComponent(list.id)) },
     h(
       'div.date-badge',
-      list.date ? [h('span.d', list.date.slice(8, 10).replace(/^0/, '')), h('span.m', shortDate(list.date).split(' ')[1] ?? '')] : icon('list'),
+      list.date ? [h('span.m', shortDate(list.date).split(' ')[1] ?? ''), h('span.d', list.date.slice(8, 10).replace(/^0/, ''))] : icon('calendar', { size: 20 }),
     ),
     h(
       'div.card-main',
-      h('div.card-title', list.name),
-      h('div.card-sub', [rel ? h('strong', rel + ' · ') : null, longDate(list.date)]),
-      h('div.card-sub.muted', plural(list.items.length, 'canción', 'canciones'), list.pending ? pendingChip(list.pending.status) : null),
+      h('div.card-title', featured ? h('span.dot', { title: 'Próximo evento' }) : null, list.name),
+      h('div.card-sub', [rel ? rel + ' · ' : '', longDate(list.date), ' · ', plural(list.items.length, 'canción', 'canciones')]),
+      list.pending ? pendingChip(list.pending.status) : null,
     ),
-    h('span.chev', icon('next')),
+    icon('next', { size: 16, cls: 'icon chev' }),
   );
 }
 
@@ -102,6 +106,7 @@ export function emptyState(title, text, action) {
   return h('div.empty', h('div.empty-title', title), text ? h('p', text) : null, action ?? null);
 }
 
-export function pageHeader(title, sub) {
-  return h('header.page-head', h('h1', title), sub ? h('p.page-sub', sub) : null);
+/** Título grande (se encoge al desplazar) con subtítulo y contenido extra opcionales. */
+export function pageHeader(title, sub, ...extra) {
+  return h('header.page-head', h('h1', title), sub ? h('p.page-sub', sub) : null, ...extra);
 }

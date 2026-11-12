@@ -1,0 +1,30 @@
+{title: Blessed Assurance}
+{subtitle: Batería · 6/8 (compás de 9/8 en la partitura)}
+{tempo: 54}
+{time: 6/8}
+
+{c: Intro · piano solo, batería entra en el verso 1}
+
+{start_of_tab: Ritmo 6/8 · versos}
+       1 . . 2 . . 3 . . 4 . .
+Ch   | x . x x . x x . x x . x |
+Aro  | . . . o . . . . . o . . |
+Bom  | o . . . . . o . . . . . |
+{end_of_tab}
+
+{start_of_tab: Ritmo 6/8 · coro}
+       1 . . 2 . . 3 . . 4 . .
+Ride | x . x x . x x . x x . x |
+Caja | . . . O . . . . . O . . |
+Bom  | o . . . . o o . . . . . |
+{end_of_tab}
+
+{c: Verso 1 · solo charles, sin aro los 2 primeros compases}
+{start_of_chorus: Coro}
+Ritmo de coro. Platillo al empezar «This is my story».
+Relleno de toms al final de «all the day long».
+{end_of_chorus}
+{c: Verso 2 · ritmo de versos}
+{chorus}
+{c: Verso 3 · ritmo de versos, más suave}
+{chorus: Coro final · ritardando en el último «long»}

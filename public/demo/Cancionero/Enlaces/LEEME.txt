@@ -1,0 +1,18 @@
+# Carpeta de enlaces para «Escuchar».
+# En la demostración no hay enlaces reales, por eso el botón aparece desactivado.
+#
+# Formatos que entiende la app (elige el que te resulte más cómodo):
+#
+# 1) Un archivo con muchas canciones, una por línea (nombre del archivo o título, y el enlace):
+#      Castillo fuerte | https://www.youtube.com/watch?v=XXXXXXXXXXX
+#      Santo santo santo; https://youtu.be/XXXXXXXXXXX
+#    o el nombre en una línea y el enlace en la siguiente.
+#
+# 2) Un archivo por canción con el mismo nombre que la canción:
+#      Castillo fuerte.url      (acceso directo de Windows)
+#      Castillo fuerte.webloc   (enlace de Mac)
+#      Castillo fuerte.txt      (solo el enlace dentro)
+#
+# 3) Dentro de la propia canción (ChordPro):  {x_youtube: https://youtu.be/XXXXXXXXXXX}
+#
+# Las líneas que empiezan por # se ignoran.

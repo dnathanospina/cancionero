@@ -7,6 +7,7 @@ import { resolveItem, SECTION_LABEL } from '../library/library.js';
 import { longDate, relativeDay } from '../ui/format.js';
 import { icon } from '../ui/icons.js';
 import { songHref } from './home.js';
+import { openListenSheet } from '../features/listen.js';
 
 export function ListsView() {
   const today = todayISO();
@@ -30,6 +31,12 @@ export function ListDetailView({ id }) {
   const items = list.items.map((it, i) => ({ it, i, ...resolveItem(lib, it, section) }));
   const first = items.find((x) => x.song);
   const rel = relativeDay(list.date);
+  // Los enlaces son de la canción (voces); la batería los hereda.
+  const listenItems = list.items.map((it) => {
+    const v = resolveItem(lib, it, 'voces').song;
+    const d = resolveItem(lib, it, 'bateria').song;
+    return { title: v?.title ?? d?.title ?? it.name, link: v?.link || d?.link || '' };
+  });
 
   const el = h(
     'div.view.list-detail',
@@ -41,7 +48,13 @@ export function ListDetailView({ id }) {
       list.notes ? h('p.list-notes', list.notes) : null,
       h('p.page-sub', 'Mostrando la parte de ', h('strong', SECTION_LABEL[section])),
     ),
-    first ? h('div.actions', h('a.btn.primary', { href: songHref(list, first.i, first.song) }, icon('play', { size: 18 }), 'Empezar')) : null,
+    h(
+      'div.actions',
+      first ? h('a.btn.primary', { href: songHref(list, first.i, first.song) }, icon('play', { size: 18 }), 'Empezar') : null,
+      listenItems.some((x) => x.link)
+        ? h('button.btn.ghost', { onclick: () => openListenSheet(list, listenItems) }, icon('headphones', { size: 18 }), 'Escuchar la lista')
+        : h('button.btn.ghost', { disabled: true, title: 'Ninguna canción de la lista tiene enlace' }, icon('headphones', { size: 18 }), 'Sin enlaces para escuchar'),
+    ),
     h(
       'div.rows.numbered',
       items.map(({ it, i, song, fallback }) =>

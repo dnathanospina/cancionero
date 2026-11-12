@@ -1,0 +1,7 @@
+nombre: Culto de Navidad
+fecha: @domingo+35
+notas: Ensayo especial el sábado anterior.
+
+Noche de paz | tono: D
+Santo santo santo
+Doxología

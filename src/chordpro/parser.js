@@ -22,6 +22,25 @@ const META_KEYS = new Set([
   'tempo', 'time', 'duration', 'copyright',
 ]);
 
+/**
+ * Directivas de categorías/etiquetas. SongBook (LinkeSoft) usa {tag: …} (una o
+ * varias por canción); se aceptan también variantes de otras apps.
+ */
+const TAG_KEYS = new Set([
+  'tag', 'tags', 'category', 'categories', 'categoria', 'categorias', 'keywords', 'keyword',
+  'x_tag', 'x_tags', 'x_category', 'x_categories', 'x_sbp_tags', 'x_spb_tag', 'x_sbp_tag',
+]);
+
+/** Directivas con el enlace para escuchar la canción. */
+const LINK_KEYS = ['x_youtube', 'youtube', 'x_link', 'link', 'x_url', 'url', 'x_audio', 'audio'];
+
+export function splitTags(value) {
+  return String(value ?? '')
+    .split(/[,;|]/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
 const ENV_LABELS = { chorus: 'Coro', verse: '', bridge: 'Puente', tab: '', grid: '' };
 
 const DIRECTIVE = /^\{\s*([A-Za-z_][\w-]*)\s*(?:[:\s]\s*([\s\S]*?))?\s*\}\s*$/;
@@ -55,7 +74,7 @@ export function parseLyricsLine(line) {
 }
 
 export function parseChordPro(text) {
-  const meta = { x: {} };
+  const meta = { x: {}, tags: [], links: {} };
   const blocks = [];
   let block = { type: 'none', label: '', lines: [] };
   let hasChords = false;
@@ -93,11 +112,18 @@ export function parseChordPro(text) {
     const d = line.trim().startsWith('{') ? parseDirective(line) : null;
     if (d) {
       const { name, value } = d;
-      if (META_KEYS.has(name)) {
+      if (TAG_KEYS.has(name)) {
+        meta.tags.push(...splitTags(value));
+      } else if (LINK_KEYS.includes(name)) {
+        if (value && !meta.links[name]) meta.links[name] = value;
+      } else if (META_KEYS.has(name)) {
         if (!(name in meta)) meta[name] = value;
       } else if (name === 'meta') {
         const [k, ...v] = value.split(/\s+/);
-        if (k && !(k.toLowerCase() in meta)) meta[k.toLowerCase()] = v.join(' ');
+        const key = (k ?? '').toLowerCase();
+        if (TAG_KEYS.has(key)) meta.tags.push(...splitTags(v.join(' ')));
+        else if (LINK_KEYS.includes(key)) meta.links[key] ??= v.join(' ');
+        else if (key && !(key in meta)) meta[key] = v.join(' ');
       } else if (name.startsWith('x_')) {
         meta.x[name.slice(2)] = value;
       } else if (name.startsWith('start_of_')) {
@@ -128,6 +154,8 @@ export function parseChordPro(text) {
   }
 
   meta.hasChords = hasChords;
+  meta.tags = [...new Set(meta.tags)];
+  meta.link = LINK_KEYS.map((k) => meta.links[k]).find(Boolean) ?? '';
   return { meta, blocks: blocks.filter((b) => b.lines.length) };
 }
 

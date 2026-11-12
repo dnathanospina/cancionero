@@ -3,6 +3,8 @@
 {key: D}
 {tempo: 54}
 {time: 9/8}
+{tag: Himnos}
+{tag: No usadas}
 {x_bateria: Blessed Assurance (6-8)}
 # {x_bateria} enlaza con la versión de batería aunque su archivo tenga otro nombre.
 

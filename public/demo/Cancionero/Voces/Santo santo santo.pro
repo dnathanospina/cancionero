@@ -3,6 +3,8 @@
 {key: Re}
 {tempo: 92}
 {time: 4/4}
+{tag: Himnos}
+{tag: Adoración (lentas)}
 # Este archivo usa notación latina a propósito: la app la entiende y la convierte.
 
 {start_of_verse: Estrofa 1}

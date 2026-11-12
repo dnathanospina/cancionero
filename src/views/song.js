@@ -8,21 +8,27 @@ import { loadSongDoc } from '../chordpro/song-doc.js';
 import { firstChord } from '../chordpro/parser.js';
 import { renderSong } from '../viewers/chordpro-view.js';
 import { createPageStack } from '../viewers/page-stack.js';
+import { createPager } from '../viewers/pager.js';
 import { parseKey, semitoneDiff } from '../music/chords.js';
 import { makeChordTransformer, keyName, shiftKey } from '../music/transpose.js';
-import { createAutoScroller, SPEED_MIN, SPEED_MAX } from '../features/autoscroll.js';
+import { createAutoScroller, SPEED_MIN } from '../features/autoscroll.js';
 import { listenPedal } from '../features/pedal.js';
 import { keepAwake } from '../features/wakelock.js';
+import { listenButton } from '../features/listen.js';
+import { attachSongSwipe } from '../features/swipe.js';
+import { enterImmersive, exitImmersive, isImmersive, onImmersiveChange } from '../features/immersive.js';
 import { ensureBlob } from '../sync/sync.js';
 import { link, emptyState } from '../ui/components.js';
 
 const FONT_MIN = 0.7;
 const FONT_MAX = 2.4;
 
-function songUrl(list, index, song, ver) {
+function songUrl(list, index, song, { ver, atEnd } = {}) {
   if (!list) return link(`/cancion/${song.section}/${encodeURIComponent(song.id)}`);
   return link(
-    `/cancion/${song.section}/${encodeURIComponent(song.id)}?lista=${encodeURIComponent(list.id)}&i=${index}` + (ver ? `&ver=${ver}` : ''),
+    `/cancion/${song.section}/${encodeURIComponent(song.id)}?lista=${encodeURIComponent(list.id)}&i=${index}` +
+      (ver ? `&ver=${ver}` : '') +
+      (atEnd ? '&fin=1' : ''),
   );
 }
 
@@ -31,6 +37,7 @@ export function SongView({ section, id, query, backHref }) {
   const list = query.get('lista') ? lib.lists.find((l) => l.id === query.get('lista')) : null;
   const index = list ? parseInt(query.get('i') ?? '0', 10) : -1;
   const ver = query.get('ver'); // sección forzada dentro de una lista
+  const openAtEnd = query.get('fin') === '1'; // se llega retrocediendo desde la canción siguiente
   const item = list?.items[index] ?? null;
 
   let song;
@@ -59,15 +66,22 @@ export function SongView({ section, id, query, backHref }) {
   };
   const prev = findStep(-1);
   const next = findStep(1);
-  const go = (step) => step && location.replace(songUrl(list, step.index, step.song));
+  const go = (step, opts) => step && location.replace(songUrl(list, step.index, step.song, opts));
+  const edgeLabels = { next: next?.song.title, prev: prev?.song.title };
+  /** Cambia de canción por gesto o pedal; devuelve false si no hay más. */
+  const advance = (dir) => {
+    const step = dir > 0 ? next : prev;
+    if (step) {
+      go(step, { atEnd: dir < 0 });
+      return true;
+    }
+    if (list) toast(dir > 0 ? 'Es la última canción de la lista' : 'Es la primera canción de la lista');
+    return false;
+  };
 
   // Otra versión (voces ⇄ batería).
   const other = song.section === 'voces' ? drumVersion(lib, song) : vocesVersion(lib, song);
-  const otherHref = other
-    ? list
-      ? songUrl(list, index, other, other.section)
-      : songUrl(null, 0, other)
-    : null;
+  const otherHref = other ? (list ? songUrl(list, index, other, { ver: other.section }) : songUrl(null, 0, other)) : null;
 
   const cleanups = [];
   const scroller = h('div.song-scroll', { tabindex: '-1' });
@@ -113,6 +127,20 @@ export function SongView({ section, id, query, backHref }) {
     controls,
   );
 
+  // ---- Pantalla completa (API real en Android/escritorio; en iPhone se ocultan las barras)
+  const fsBtn = h('button.ctl-btn', { onclick: () => (isImmersive() ? exitImmersive() : enterImmersive()) });
+  const syncImmersive = () => {
+    const on = isImmersive();
+    screen.classList.toggle('immersive', on);
+    screen.classList.toggle('chrome-hidden', on);
+    fsBtn.replaceChildren(icon(on ? 'shrink' : 'expand', { size: 20 }));
+    fsBtn.setAttribute('aria-label', on ? 'Salir de pantalla completa' : 'Pantalla completa');
+    fsBtn.title = fsBtn.getAttribute('aria-label');
+  };
+  syncImmersive();
+  cleanups.push(onImmersiveChange(syncImmersive));
+  const moreGroup = () => group('Más', [listenButton(song.link, { compact: true }), fsBtn], 'more');
+
   // ---- Desplazamiento automático
   const speedLabel = h('span.ctl-value');
   const playBtn = h('button.ctl-btn.play', { 'aria-label': 'Desplazamiento automático' });
@@ -149,7 +177,7 @@ export function SongView({ section, id, query, backHref }) {
     const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
     const fast = performance.now() - down.t < 350;
     down = null;
-    if (moved > 10 || !fast || stack?.pinching) return;
+    if (moved > 10 || !fast || stack?.pinching || pager?.busy) return;
     if (scrollerApi.running) {
       scrollerApi.stop();
       screen.classList.remove('chrome-hidden');
@@ -162,26 +190,44 @@ export function SongView({ section, id, query, backHref }) {
   const atBottom = () => scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 4;
   const atTop = () => scroller.scrollTop <= 2;
   const page = (dir) => scroller.scrollBy({ top: dir * scroller.clientHeight * 0.8, behavior: 'smooth' });
-  const tryStep = (step, last) => {
-    if (step) go(step);
-    else if (list) toast(last);
-  };
+  const auto = () => list && state.settings.autoAdvance;
+  // Mientras se abre un PDF o imagen, el pedal espera (no salta de canción).
+  const loading = () => song.kind !== 'chordpro' && !pager && !stack;
+  const guard = (fn) => (e) => (loading() ? undefined : fn(e));
   cleanups.push(
     listenPedal(() => state.settings.pedal, {
-      scrollDown: (e) => {
-        if (atBottom() && list && state.settings.autoAdvance) !e.repeat && tryStep(next, 'Es la última canción de la lista');
+      scrollDown: guard((e) => {
+        if (pager) return pager.forward() || (!e.repeat && auto() && advance(1));
+        if (atBottom() && auto()) !e.repeat && advance(1);
         else page(1);
-      },
-      scrollUp: (e) => {
-        if (atTop() && list && state.settings.autoAdvance) !e.repeat && tryStep(prev, 'Es la primera canción de la lista');
+      }),
+      scrollUp: guard((e) => {
+        if (pager) return pager.back() || (!e.repeat && auto() && advance(-1));
+        if (atTop() && auto()) !e.repeat && advance(-1);
         else page(-1);
-      },
-      nextSong: (e) => !e.repeat && tryStep(next, 'Es la última canción de la lista'),
-      prevSong: (e) => !e.repeat && tryStep(prev, 'Es la primera canción de la lista'),
-      toggleScroll: (e) => !e.repeat && scrollerApi.toggle(),
+      }),
+      // En el visor por páginas, las flechas pasan página y después canción.
+      nextSong: guard((e) => (pager ? pager.forward() || (!e.repeat && advance(1)) : !e.repeat && advance(1))),
+      prevSong: guard((e) => (pager ? pager.back() || (!e.repeat && advance(-1)) : !e.repeat && advance(-1))),
+      toggleScroll: guard((e) => !e.repeat && !pager && scrollerApi.toggle()),
     }),
   );
   cleanups.push(keepAwake());
+
+  // ---- Deslizar en horizontal: canción anterior/siguiente (no en el visor por páginas)
+  const swipeHint = h('div.swipe-hint', { 'aria-hidden': 'true' });
+  screen.append(swipeHint);
+  if (list) {
+    cleanups.push(
+      attachSongSwipe(scroller, {
+        enabled: () => !pager,
+        labels: edgeLabels,
+        hint: swipeHint,
+        moveEl: paper,
+        onSwipe: (dir) => (dir > 0 ? next : prev) && advance(dir),
+      }),
+    );
+  }
 
   // ---- Final de la canción
   const endBlock = () =>
@@ -195,6 +241,7 @@ export function SongView({ section, id, query, backHref }) {
       : h('div.song-end');
 
   let stack = null;
+  let pager = null;
   const setControls = (...groups) => controls.replaceChildren(...groups.filter(Boolean));
 
   async function init() {
@@ -279,6 +326,7 @@ export function SongView({ section, id, query, backHref }) {
       hasChords ? group('Acordes', [lyricsBtn]) : null,
       group('Letra', [btn('minus', 'Letra más pequeña', () => setFont(-0.1), false, 'A'), btn('plus', 'Letra más grande', () => setFont(0.1), false, 'A')], 'font'),
       scrollGroup,
+      moreGroup(),
     );
 
     const unsub = subscribe((what) => {
@@ -290,6 +338,7 @@ export function SongView({ section, id, query, backHref }) {
     });
     cleanups.push(unsub);
     draw();
+    if (openAtEnd) requestAnimationFrame(() => (scroller.scrollTop = scroller.scrollHeight));
   }
 
   const setFont = (d) => {
@@ -301,7 +350,7 @@ export function SongView({ section, id, query, backHref }) {
   async function initPages(prefs) {
     paper.classList.add('pages-paper');
     paper.replaceChildren(h('div.loading', 'Abriendo partitura…'));
-    setControls(scrollGroup);
+    setControls(moreGroup());
     let blobs;
     try {
       blobs = await Promise.all(song.paths.map((p) => ensureBlob(currentSource(), p)));
@@ -319,39 +368,82 @@ export function SongView({ section, id, query, backHref }) {
       );
       return;
     }
-    let pages;
-    try {
-      pages =
-        song.kind === 'pdf'
-          ? await (await import('../viewers/pdf-view.js')).pdfPages(blobs[0])
-          : await (await import('../viewers/image-view.js')).imagePages(blobs);
-    } catch (e) {
-      console.error(e);
-      paper.replaceChildren(emptyState('No se pudo abrir la partitura', String(e.message || e)));
-      return;
-    }
-    if (destroyed) return pages.dispose?.();
+
+    const makePages = async () =>
+      song.kind === 'pdf'
+        ? (await import('../viewers/pdf-view.js')).pdfPages(blobs[0])
+        : (await import('../viewers/image-view.js')).imagePages(blobs);
 
     const zoomLabel = h('button.ctl-value.wide', { title: 'Ajustar al ancho' });
     const showZoom = (z) => {
       zoomLabel.textContent = Math.round(z * 100) + '%';
     };
-    paper.replaceChildren();
-    stack = createPageStack(scroller, pages, {
-      zoom: prefs.zoom ?? 1,
-      onZoom: (z) => {
-        showZoom(z);
-        db.prefPatch(song.key, { zoom: z });
-      },
+    const saveZoom = (z) => {
+      showZoom(z);
+      db.prefPatch(song.key, { zoom: z });
+    };
+    const viewer = () => pager ?? stack;
+
+    async function mount() {
+      let pages;
+      try {
+        pages = await makePages();
+      } catch (e) {
+        console.error(e);
+        paper.replaceChildren(emptyState('No se pudo abrir la partitura', String(e.message || e)));
+        return;
+      }
+      if (destroyed) return pages.dispose?.();
+      pager?.destroy();
+      stack?.destroy();
+      pager = stack = null;
+      const paged = state.settings.pageMode !== 'scroll';
+      screen.classList.toggle('paged-mode', paged);
+      if (paged) {
+        paper.replaceChildren();
+        paper.hidden = true;
+        pager = createPager(scroller, pages, {
+          zoom: prefs.zoom ?? 1,
+          start: openAtEnd ? 'last' : 0,
+          onZoom: saveZoom,
+          edgeLabels: list ? edgeLabels : {},
+          onEdge: (dir) => list && advance(dir),
+        });
+      } else {
+        paper.hidden = false;
+        paper.replaceChildren();
+        stack = createPageStack(scroller, pages, { zoom: prefs.zoom ?? 1, onZoom: saveZoom });
+        paper.append(stack.el, endBlock());
+        if (openAtEnd) requestAnimationFrame(() => (scroller.scrollTop = scroller.scrollHeight));
+      }
+      showZoom(viewer().zoom);
+      const modeBtn = h(
+        'button.ctl-btn.toggle',
+        {
+          'aria-pressed': String(paged),
+          title: paged ? 'Ver en continuo' : 'Ver página a página',
+          onclick: async () => {
+            await setSettings({ pageMode: paged ? 'scroll' : 'paged' });
+            scrollerApi.stop();
+            mount();
+          },
+        },
+        icon(paged ? 'pages' : 'scrollV', { size: 20 }),
+        h('span', paged ? 'Páginas' : 'Continuo'),
+      );
+      setControls(
+        group('Zoom', [btn('zoomOut', 'Alejar', () => viewer().setZoom(viewer().zoom / 1.2)), zoomLabel, btn('zoomIn', 'Acercar', () => viewer().setZoom(viewer().zoom * 1.2))], 'zoom'),
+        group('Vista', [modeBtn]),
+        paged ? null : scrollGroup,
+        moreGroup(),
+      );
+    }
+    zoomLabel.onclick = () => viewer()?.setZoom(1);
+    cleanups.push(() => {
+      pager?.destroy();
+      stack?.destroy();
     });
-    paper.append(stack.el, endBlock());
-    showZoom(stack.zoom);
-    zoomLabel.onclick = () => stack.setZoom(1);
-    cleanups.push(() => stack.destroy());
-    setControls(
-      group('Zoom', [btn('zoomOut', 'Alejar', () => stack.setZoom(stack.zoom / 1.2)), zoomLabel, btn('zoomIn', 'Acercar', () => stack.setZoom(stack.zoom * 1.2))], 'zoom'),
-      scrollGroup,
-    );
+    await mount();
   }
 
   let destroyed = false;

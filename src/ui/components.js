@@ -86,10 +86,16 @@ export function listCard(list, { featured = false } = {}) {
       'div.card-main',
       h('div.card-title', list.name),
       h('div.card-sub', [rel ? h('strong', rel + ' · ') : null, longDate(list.date)]),
-      h('div.card-sub.muted', plural(list.items.length, 'canción', 'canciones')),
+      h('div.card-sub.muted', plural(list.items.length, 'canción', 'canciones'), list.pending ? pendingChip(list.pending.status) : null),
     ),
     h('span.chev', icon('next')),
   );
+}
+
+const PENDING_LABEL = { pending: 'Pendiente de subir', conflict: 'Conflicto', error: 'No se pudo subir' };
+/** Etiqueta de estado de una lista guardada en el dispositivo y aún no subida. */
+export function pendingChip(status) {
+  return h(`span.status-chip.${status}`, icon(status === 'pending' ? 'cloud' : 'alert', { size: 13 }), PENDING_LABEL[status] ?? status);
 }
 
 export function emptyState(title, text, action) {

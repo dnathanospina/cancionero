@@ -25,9 +25,9 @@ test('deduce nombre y fecha del archivo', () => {
 });
 
 test('clasifica rutas', () => {
-  assert.deepEqual(classifyPath('Voces/Himno.cho'), { section: 'voces', ext: 'cho', kind: 'text' });
-  assert.deepEqual(classifyPath('Batería/Himno.PDF'), { section: 'bateria', ext: 'pdf', kind: 'pdf' });
-  assert.deepEqual(classifyPath('Listas/2026-11-15 Domingo.txt'), { section: 'listas', ext: 'txt', kind: 'list' });
+  assert.deepEqual(classifyPath('Voces/Himno.cho'), { section: 'voces', ext: 'cho', kind: 'text', depth: 1 });
+  assert.deepEqual(classifyPath('Batería/Himno.PDF'), { section: 'bateria', ext: 'pdf', kind: 'pdf', depth: 1 });
+  assert.deepEqual(classifyPath('Listas/2026-11-15 Domingo.txt'), { section: 'listas', ext: 'txt', kind: 'list', depth: 1 });
   assert.equal(classifyPath('Otros/x.cho'), null);
   assert.equal(classifyPath('Voces/x.docx'), null);
 });

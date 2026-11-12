@@ -3,6 +3,7 @@ import '@fontsource/open-sans/latin-400.css';
 import '@fontsource/open-sans/latin-700.css';
 import './styles/base.css';
 import './styles/song.css';
+import './styles/editor.css';
 
 import { h, clear } from './ui/dom.js';
 import { icon } from './ui/icons.js';
@@ -16,6 +17,8 @@ import { SongsView } from './views/songs.js';
 import { ListsView, ListDetailView } from './views/lists.js';
 import { SongView } from './views/song.js';
 import { SettingsView } from './views/settings.js';
+import { ListEditorView } from './views/list-editor.js';
+import { flushOutbox } from './lists/outbox-runner.js';
 import { plural } from './ui/format.js';
 
 // ---------- Tema
@@ -78,6 +81,9 @@ function route() {
   let view;
   if (!parts.length) view = HomeView();
   else if (parts[0] === 'canciones') view = SongsView({ query });
+  else if (parts[0] === 'listas' && parts[1] === 'nueva') view = ListEditorView({ mode: 'new', query });
+  else if (parts[0] === 'listas' && parts[1] === 'editar') view = ListEditorView({ mode: 'edit', id: parts.slice(2).join('/'), query });
+  else if (parts[0] === 'listas' && parts[1] === 'duplicar') view = ListEditorView({ mode: 'duplicate', id: parts.slice(2).join('/'), query });
   else if (parts[0] === 'listas') view = ListsView();
   else if (parts[0] === 'lista') view = ListDetailView({ id: parts.slice(1).join('/') });
   else if (songMode) view = SongView({ section: parts[1], id: parts[2] ?? '', query, backHref: lastListHref });
@@ -102,11 +108,15 @@ function route() {
   }
   if (!view.fullscreen) window.scrollTo(0, scrollMemory.get(path) ?? 0);
   view.focus?.();
+  maybeApplyUpdate();
 }
 
-/** Repinta la vista actual cuando cambian datos (salvo una canción abierta). */
+/**
+ * Repinta la vista actual cuando cambian datos, salvo una canción abierta o el
+ * editor de listas (que no debe perder lo que se está escribiendo).
+ */
 function refresh() {
-  if (current?.fullscreen) return;
+  if (current?.fullscreen || current?.el.classList.contains('list-editor')) return;
   const y = window.scrollY;
   scrollMemory.set(currentKey, y);
   route();
@@ -121,8 +131,10 @@ subscribe((what) => {
     applyTheme();
     renderChrome();
     refresh();
-  } else if (what === 'library' || what === 'install') {
+  } else if (what === 'library' || what === 'install' || what === 'leader') {
     refresh();
+  } else if (what === 'editing') {
+    maybeApplyUpdate();
   } else if (what === 'sync') {
     appbarSync.classList.toggle('spinning', state.sync.running);
     appbarSync.disabled = state.sync.running;
@@ -137,7 +149,8 @@ subscribe((what) => {
 window.addEventListener('hashchange', route);
 window.addEventListener('online', () => {
   setOnline(true);
-  runSync({ quiet: true }).then(report);
+  // Primero se suben los cambios pendientes del modo líder, luego se actualiza.
+  flushOutbox().finally(() => runSync({ quiet: true }).then(report));
 });
 window.addEventListener('offline', () => setOnline(false));
 
@@ -157,15 +170,53 @@ function report(r) {
 appbarSync.onclick = () => runSync().then(report);
 
 // ---------- Service worker (actualizaciones de la app)
+// Una versión nueva se instala sola si no hay una canción abierta ni una lista
+// a medio editar; si las hay, espera para no interrumpir en mitad de un culto.
+let applyUpdate = null;
+let updateToast = null;
+
+function safeToReload() {
+  return !document.body.classList.contains('song-mode') && !state.editingDirty && !document.body.classList.contains('sheet-open');
+}
+
+function maybeApplyUpdate() {
+  if (!applyUpdate) return;
+  if (safeToReload()) {
+    updateToast?.remove();
+    toast('Actualizando el cancionero a la nueva versión…', { variant: 'gold', timeout: 0 });
+    const run = applyUpdate;
+    applyUpdate = null;
+    setTimeout(run, 900);
+  } else if (!updateToast?.isConnected) {
+    const inSong = document.body.classList.contains('song-mode');
+    const why = inSong ? 'al cerrar la canción' : 'al terminar de editar';
+    // En una canción el aviso se retira solo para no tapar la letra; la
+    // actualización sigue esperando y se instala al salir.
+    updateToast = toast(`Nueva versión lista: se instalará ${why}.`, {
+      variant: 'gold',
+      timeout: inSong ? 6000 : 0,
+      action: { label: 'Ahora', run: () => applyUpdate?.() },
+    });
+  }
+}
+
 async function registerSW() {
   if (!('serviceWorker' in navigator) || import.meta.env.DEV) return;
   const { registerSW } = await import('virtual:pwa-register');
   const update = registerSW({
     onNeedRefresh() {
-      toast('Hay una versión nueva del cancionero.', { action: { label: 'Actualizar', run: () => update(true) }, timeout: 0 });
+      applyUpdate = () => update(true);
+      maybeApplyUpdate();
     },
     onOfflineReady() {
       toast('Listo para usar sin conexión');
+    },
+    onRegisteredSW(_url, reg) {
+      if (!reg) return;
+      // Buscar versiones nuevas al volver a la app y cada 30 minutos.
+      const check = () => navigator.onLine && reg.update().catch(() => {});
+      setInterval(check, 30 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && check());
     },
   });
 }
@@ -182,6 +233,10 @@ async function start() {
   route();
   registerSW();
   const empty = !state.files.length;
-  if (navigator.onLine) runSync({ quiet: !empty }).then((r) => (empty ? null : report(r)));
+  if (navigator.onLine) {
+    runSync({ quiet: !empty })
+      .then((r) => (empty ? null : report(r)))
+      .then(() => flushOutbox());
+  }
 }
 start();

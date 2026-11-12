@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "nota": "Demostración: el PIN de líder es 123456. En la versión real, el líder crea el suyo desde la app.",
+  "pin": {
+    "algo": "PBKDF2-SHA256",
+    "iterations": 310000,
+    "salt": "mGi+6taccvOQ6zQkjrzJaA==",
+    "hash": "KFWju/uuaFJMyX7rQ/XT9zr4KwCAklKvX5O5UY3QObE="
+  },
+  "updatedAt": "2026-11-12T10:12:06.073Z"
+}

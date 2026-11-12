@@ -18,6 +18,7 @@
   "dependencies": {
     "@fontsource/cabin": "5.2.8",
     "@fontsource/open-sans": "5.2.7",
+    "fflate": "0.8.3",
     "idb": "8.0.4",
     "pdfjs-dist": "6.4.299"
   },

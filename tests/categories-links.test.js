@@ -61,7 +61,7 @@ test('lee archivos de enlaces en varios formatos', () => {
   assert.deepEqual(parseLinksFile('https://youtu.be/ggggggggggg\n', 'txt', 'Amazing Grace'), [
     { name: 'Amazing Grace', url: 'https://www.youtube.com/watch?v=ggggggggggg' },
   ]);
-  assert.deepEqual(classifyPath('Enlaces/Noche de paz.url'), { section: 'enlaces', ext: 'url', kind: 'links' });
+  assert.deepEqual(classifyPath('Enlaces/Noche de paz.url'), { section: 'enlaces', ext: 'url', kind: 'links', depth: 1 });
 });
 
 const files = [

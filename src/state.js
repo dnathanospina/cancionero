@@ -3,6 +3,9 @@ import { buildLibrary } from './library/library.js';
 import { syncFrom, prefetch } from './sync/sync.js';
 import { demoSource } from './sources/demo.js';
 import { upcomingLists, resolveItem } from './library/library.js';
+import { songMeta } from './chordpro/song-doc.js';
+import { applyOutbox } from './lists/outbox.js';
+import { DEFAULT_LAYOUT } from './config.js';
 
 export const DEFAULT_PEDAL = {
   scrollDown: ['PageDown', 'ArrowDown'],
@@ -21,6 +24,8 @@ export const DEFAULT_SETTINGS = {
   pedal: DEFAULT_PEDAL,
   autoAdvance: true,
   downloadAll: false,
+  sundayTime: '11:00', // hora que propone la plantilla «Domingo»
+  layout: DEFAULT_LAYOUT, // estructura de carpetas en OneDrive (fase 2b)
   pageMode: 'paged', // PDF/imágenes: 'paged' (página a página) o 'scroll' (continuo)
   source: 'demo',
 };
@@ -33,6 +38,7 @@ export const state = {
   settings: { ...DEFAULT_SETTINGS },
   library: emptyLib,
   files: [],
+  outbox: [],
   sync: { running: false, progress: null, last: null, error: null },
   online: typeof navigator !== 'undefined' ? navigator.onLine : true,
   installPrompt: null,
@@ -46,6 +52,7 @@ export function subscribe(fn) {
 function emit(what) {
   for (const fn of listeners) fn(what);
 }
+export const emitChange = emit;
 
 export function currentSource() {
   return SOURCES[state.settings.source] ?? demoSource;
@@ -53,7 +60,12 @@ export function currentSource() {
 
 export async function loadSettings() {
   const saved = await db.kvGet('settings', {});
-  state.settings = { ...DEFAULT_SETTINGS, ...saved, pedal: { ...DEFAULT_PEDAL, ...(saved.pedal ?? {}) } };
+  state.settings = {
+    ...DEFAULT_SETTINGS,
+    ...saved,
+    pedal: { ...DEFAULT_PEDAL, ...(saved.pedal ?? {}) },
+    layout: { ...DEFAULT_LAYOUT, ...(saved.layout ?? {}) },
+  };
   state.sync.last = await db.kvGet('lastSync', null);
   emit('settings');
 }
@@ -66,7 +78,12 @@ export async function setSettings(patch) {
 
 export async function reloadLibrary() {
   state.files = await db.getAllFiles();
-  state.library = buildLibrary(state.files);
+  // Archivos guardados por una versión anterior: se recalculan sus datos (categorías, enlace).
+  for (const f of state.files) {
+    if (f.kind === 'text' && typeof f.text === 'string' && !Array.isArray(f.meta?.tags)) f.meta = songMeta(f.text, f.ext);
+  }
+  state.outbox = await db.outboxAll();
+  state.library = buildLibrary(applyOutbox(state.files, state.outbox));
   emit('library');
 }
 

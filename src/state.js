@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS = {
   pedal: DEFAULT_PEDAL,
   autoAdvance: true,
   downloadAll: false,
+  pageMode: 'paged', // PDF/imágenes: 'paged' (página a página) o 'scroll' (continuo)
   source: 'demo',
 };
 

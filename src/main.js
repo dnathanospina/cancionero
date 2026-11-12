@@ -10,6 +10,7 @@ import { toast } from './ui/toast.js';
 import { state, subscribe, loadSettings, reloadLibrary, runSync, setOnline } from './state.js';
 import { brandMark, sectionSwitch, link } from './ui/components.js';
 import { setupInstall } from './features/install.js';
+import { exitImmersive } from './features/immersive.js';
 import { HomeView } from './views/home.js';
 import { SongsView } from './views/songs.js';
 import { ListsView, ListDetailView } from './views/lists.js';
@@ -83,7 +84,10 @@ function route() {
   else if (parts[0] === 'ajustes') view = SettingsView();
   else view = HomeView();
 
-  if (!songMode) lastListHref = '#' + raw;
+  if (!songMode) {
+    lastListHref = '#' + raw;
+    exitImmersive(); // la pantalla completa solo se mantiene entre canciones
+  }
   current = view;
   currentKey = path;
   document.body.classList.toggle('song-mode', !!view.fullscreen);

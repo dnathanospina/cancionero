@@ -16,5 +16,7 @@ export function songMeta(text, ext) {
     key: meta.key || '',
     tempo: meta.tempo || '',
     bateria: meta.x.bateria || '',
+    tags: meta.tags,
+    link: meta.link,
   };
 }
